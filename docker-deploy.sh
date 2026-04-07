@@ -17,11 +17,18 @@ set -euo pipefail
 #   Copy this file to the server and run: bash docker-deploy.sh
 # ═══════════════════════════════════════════════════════════════
 
-APP_DIR="/var/www/vehicle-erp"
+# Auto-detect: if run from inside a git repo, use that directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -d "$SCRIPT_DIR/.git" ]; then
+    APP_DIR="$SCRIPT_DIR"
+else
+    APP_DIR="/var/www/vehicle-erp"
+fi
 
 echo ""
 echo "═══════════════════════════════════════════"
 echo "  Vehicle ERP — Docker Deployment"
+echo "  Dir: $APP_DIR"
 echo "  $(date '+%Y-%m-%d %H:%M:%S %Z')"
 echo "═══════════════════════════════════════════"
 echo ""
