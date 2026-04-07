@@ -20,12 +20,16 @@ function DialogContent({ className, children }) {
   return (
     <>
       <div className="fixed inset-0 z-50 bg-black/50" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        onClick={onClose}
+      >
         <div
           className={cn(
-            'relative w-full max-w-md rounded-lg bg-background p-6 shadow-lg border',
+            'relative w-full max-w-lg rounded-lg bg-background p-6 shadow-lg border animate-in fade-in-0 zoom-in-95',
             className,
           )}
+          onClick={(e) => e.stopPropagation()}
         >
           <button
             onClick={onClose}
