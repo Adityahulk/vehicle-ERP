@@ -1,0 +1,6 @@
+{
+  "name": "vehicle-erp-shared",
+  "version": "1.0.0",
+  "description": "Shared types and constants for Vehicle ERP",
+  "main": "constants.js"
+}
