@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import useAuthStore from '@/store/authStore';
 import {
   LayoutDashboard, Car, FileText, Landmark, Receipt,
-  BarChart3, Clock, Settings, LogOut, Search, X, Loader2,
+  BarChart3, Clock, Settings, LogOut, Search, X, Loader2, Menu,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
@@ -164,19 +164,93 @@ function GlobalSearch() {
   );
 }
 
+function MobileDrawer({ open, onClose, user, onLogout }) {
+  const filteredItems = navItems.filter(
+    ({ adminOnly }) => !adminOnly || ['super_admin', 'company_admin'].includes(user?.role),
+  );
+
+  useEffect(() => {
+    if (open) document.body.style.overflow = 'hidden';
+    else document.body.style.overflow = '';
+    return () => { document.body.style.overflow = ''; };
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
+      <div className="fixed inset-y-0 left-0 z-50 w-72 bg-card border-r border-border shadow-xl flex flex-col animate-in slide-in-from-left duration-200">
+        <div className="flex items-center justify-between px-4 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <img src="/assets/mvg-logo.png" alt="MVG" className="h-8 object-contain" />
+            <span className="text-lg font-bold">MVG ERP</span>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        <div className="px-3 py-2 border-b border-border">
+          <p className="text-sm font-medium px-2">{user?.name}</p>
+          <p className="text-xs text-muted-foreground px-2">{user?.role?.replace('_', ' ')}</p>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto py-2 px-3">
+          {filteredItems.map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              onClick={onClose}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors mb-0.5',
+                  isActive
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+                )
+              }
+            >
+              <Icon className="h-4.5 w-4.5" />
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="p-3 border-t border-border">
+          <Button variant="ghost" className="w-full justify-start gap-3 text-destructive hover:text-destructive" onClick={onLogout}>
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function AppLayout({ children }) {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleLogout = async () => {
+    setMobileOpen(false);
     await logout();
     navigate('/login');
   };
 
   return (
     <div className="min-h-screen bg-muted">
-      <header className="sticky top-0 z-30 bg-card border-b border-border px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-6">
+      <header className="sticky top-0 z-30 bg-card border-b border-border px-4 sm:px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-4 sm:gap-6">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden -ml-1"
+            onClick={() => setMobileOpen(true)}
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
           <div className="flex items-center gap-2">
             <img src="/assets/mvg-logo.png" alt="MVG" className="h-8 object-contain" />
             <span className="text-lg font-bold hidden sm:inline">MVG ERP</span>
@@ -203,16 +277,19 @@ export default function AppLayout({ children }) {
               ))}
           </nav>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <GlobalSearch />
           <span className="text-sm text-muted-foreground hidden lg:inline">
             {user?.name} <span className="text-xs">({user?.role})</span>
           </span>
-          <Button variant="ghost" size="icon" onClick={handleLogout} title="Logout">
+          <Button variant="ghost" size="icon" className="hidden md:inline-flex" onClick={handleLogout} title="Logout">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
       </header>
+
+      <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)} user={user} onLogout={handleLogout} />
+
       <main className="p-4 sm:p-6">{children}</main>
     </div>
   );
