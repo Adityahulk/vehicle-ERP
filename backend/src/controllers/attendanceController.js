@@ -86,9 +86,17 @@ async function myStatus(req, res) {
   }
 }
 
+// Roles visible to each role level
+const VISIBLE_ROLES = {
+  super_admin: ['super_admin', 'company_admin', 'branch_manager', 'staff'],
+  company_admin: ['company_admin', 'branch_manager', 'staff'],
+  branch_manager: ['staff'],
+  staff: [],
+};
+
 async function todayByBranch(req, res) {
   try {
-    const { company_id } = req.user;
+    const { company_id, role: callerRole, id: callerId } = req.user;
     const { branchId } = req.params;
     const today = new Date().toISOString().split('T')[0];
 
@@ -100,15 +108,33 @@ async function todayByBranch(req, res) {
       return res.status(404).json({ error: 'Branch not found' });
     }
 
-    // All users in this branch
+    // Staff can only see their own record
+    if (callerRole === 'staff') {
+      const { rows } = await query(
+        `SELECT u.id, u.name, u.role, a.clock_in, a.clock_out
+         FROM users u
+         LEFT JOIN attendance a ON a.user_id = u.id AND a.date = $3 AND a.is_deleted = FALSE
+         WHERE u.id = $1 AND u.company_id = $2 AND u.is_deleted = FALSE`,
+        [callerId, company_id, today],
+      );
+      return res.json({
+        date: today,
+        summary: { total: rows.length, clocked_in: rows.filter((u) => u.clock_in && !u.clock_out).length, clocked_out: rows.filter((u) => u.clock_in && u.clock_out).length, absent: rows.filter((u) => !u.clock_in).length },
+        users: rows,
+      });
+    }
+
+    const allowedRoles = VISIBLE_ROLES[callerRole] || [];
+
     const { rows: branchUsers } = await query(
       `SELECT u.id, u.name, u.role,
               a.clock_in, a.clock_out
        FROM users u
        LEFT JOIN attendance a ON a.user_id = u.id AND a.date = $3 AND a.is_deleted = FALSE
        WHERE u.branch_id = $1 AND u.company_id = $2 AND u.is_deleted = FALSE AND u.is_active = TRUE
+         AND u.role = ANY($4)
        ORDER BY a.clock_in ASC NULLS LAST, u.name`,
-      [branchId, company_id, today],
+      [branchId, company_id, today, allowedRoles],
     );
 
     const clocked_in = branchUsers.filter((u) => u.clock_in && !u.clock_out).length;
@@ -128,7 +154,7 @@ async function todayByBranch(req, res) {
 
 async function report(req, res) {
   try {
-    const { company_id } = req.user;
+    const { company_id, role: callerRole, id: callerId } = req.user;
     const { from, to, user_id, branch_id } = req.query;
 
     if (!from || !to) {
@@ -139,13 +165,24 @@ async function report(req, res) {
     const params = [company_id, from, to];
     let idx = 4;
 
-    if (user_id) {
+    // Staff can only see their own attendance report
+    if (callerRole === 'staff') {
       conditions.push(`a.user_id = $${idx++}`);
-      params.push(user_id);
-    }
-    if (branch_id) {
-      conditions.push(`a.branch_id = $${idx++}`);
-      params.push(branch_id);
+      params.push(callerId);
+    } else {
+      // Managers/admins: restrict to roles they're allowed to see
+      const allowedRoles = VISIBLE_ROLES[callerRole] || [];
+      conditions.push(`u.role = ANY($${idx++})`);
+      params.push(allowedRoles);
+
+      if (user_id) {
+        conditions.push(`a.user_id = $${idx++}`);
+        params.push(user_id);
+      }
+      if (branch_id) {
+        conditions.push(`a.branch_id = $${idx++}`);
+        params.push(branch_id);
+      }
     }
 
     const where = conditions.join(' AND ');

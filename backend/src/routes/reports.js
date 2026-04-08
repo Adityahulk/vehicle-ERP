@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const { verifyToken } = require('../middleware/auth');
-const { requireMinRole } = require('../middleware/role');
+const { requireRole } = require('../middleware/role');
 const {
   gstr1,
   gstr1Export,
@@ -12,9 +12,12 @@ const router = Router();
 
 router.use(verifyToken);
 
-router.get('/gstr1', requireMinRole('company_admin'), gstr1);
-router.get('/gstr1/export', requireMinRole('company_admin'), gstr1Export);
-router.get('/sales-summary', requireMinRole('branch_manager'), salesSummary);
-router.get('/stock-aging', requireMinRole('branch_manager'), stockAging);
+const reportAccess = requireRole('super_admin', 'company_admin', 'ca');
+const reportAndManagerAccess = requireRole('super_admin', 'company_admin', 'branch_manager', 'ca');
+
+router.get('/gstr1', reportAccess, gstr1);
+router.get('/gstr1/export', reportAccess, gstr1Export);
+router.get('/sales-summary', reportAndManagerAccess, salesSummary);
+router.get('/stock-aging', reportAndManagerAccess, stockAging);
 
 module.exports = router;

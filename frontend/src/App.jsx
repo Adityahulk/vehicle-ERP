@@ -14,6 +14,13 @@ import ReportsPage from './pages/ReportsPage';
 import AttendancePage from './pages/AttendancePage';
 import VehicleDetailPage from './pages/VehicleDetailPage';
 import UnauthorizedPage from './pages/UnauthorizedPage';
+import useAuthStore from './store/authStore';
+
+function DefaultRedirect() {
+  const { user } = useAuthStore();
+  const target = user?.role === 'ca' ? '/reports' : '/dashboard';
+  return <Navigate to={target} replace />;
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,15 +42,19 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-            {/* Protected routes — all authenticated users */}
+            {/* CA-accessible routes — invoices (read-only) + reports */}
             <Route element={<ProtectedRoute />}>
+              <Route path="/sales" element={<SalesPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
+            </Route>
+
+            {/* Operational routes — all except CA */}
+            <Route element={<ProtectedRoute allowedRoles={['super_admin', 'company_admin', 'branch_manager', 'staff']} />}>
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
               <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
-              <Route path="/sales" element={<SalesPage />} />
               <Route path="/loans" element={<LoansPage />} />
               <Route path="/expenses" element={<ExpensesPage />} />
-              <Route path="/reports" element={<ReportsPage />} />
               <Route path="/attendance" element={<AttendancePage />} />
             </Route>
 
@@ -52,7 +63,7 @@ export default function App() {
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
 
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<DefaultRedirect />} />
           </Routes>
         </BrowserRouter>
       </QueryClientProvider>

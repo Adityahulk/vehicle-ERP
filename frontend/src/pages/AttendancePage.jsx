@@ -147,13 +147,11 @@ function TodayTable() {
   const { data, isLoading } = useQuery({
     queryKey: ['attendance-today', branchId],
     queryFn: () => api.get(`/attendance/today/${branchId}`).then((r) => r.data),
-    enabled: !!branchId && ['branch_manager', 'company_admin', 'super_admin'].includes(user?.role),
+    enabled: !!branchId,
     refetchInterval: 60_000,
   });
 
-  if (!branchId || !['branch_manager', 'company_admin', 'super_admin'].includes(user?.role)) {
-    return null;
-  }
+  if (!branchId) return null;
 
   if (isLoading) {
     return <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>;

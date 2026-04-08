@@ -501,9 +501,11 @@ export default function SalesPage() {
     <AppLayout>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <h2 className="text-2xl font-semibold">Sales & Invoices</h2>
-        <Button onClick={() => setSaleOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" /> New Sale
-        </Button>
+        {canManage && (
+          <Button onClick={() => setSaleOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" /> New Sale
+          </Button>
+        )}
       </div>
 
       {/* Filters */}

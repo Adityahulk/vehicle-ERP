@@ -11,13 +11,14 @@ import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 
 const navItems = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/inventory', label: 'Inventory', icon: Car },
-  { to: '/sales', label: 'Sales', icon: FileText },
-  { to: '/loans', label: 'Loans', icon: Landmark },
-  { to: '/expenses', label: 'Expenses', icon: Receipt },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, hideFor: ['ca'] },
+  { to: '/inventory', label: 'Inventory', icon: Car, hideFor: ['ca'] },
+  { to: '/sales', label: 'Invoices', icon: FileText, onlyFor: ['ca'] },
+  { to: '/sales', label: 'Sales', icon: FileText, hideFor: ['ca'] },
+  { to: '/loans', label: 'Loans', icon: Landmark, hideFor: ['ca'] },
+  { to: '/expenses', label: 'Expenses', icon: Receipt, hideFor: ['ca'] },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
-  { to: '/attendance', label: 'Attendance', icon: Clock },
+  { to: '/attendance', label: 'Attendance', icon: Clock, hideFor: ['ca'] },
   { to: '/settings', label: 'Settings', icon: Settings, adminOnly: true },
 ];
 
@@ -164,10 +165,17 @@ function GlobalSearch() {
   );
 }
 
+function filterNav(role) {
+  return navItems.filter(({ adminOnly, hideFor, onlyFor }) => {
+    if (adminOnly && !['super_admin', 'company_admin'].includes(role)) return false;
+    if (hideFor && hideFor.includes(role)) return false;
+    if (onlyFor && !onlyFor.includes(role)) return false;
+    return true;
+  });
+}
+
 function MobileDrawer({ open, onClose, user, onLogout }) {
-  const filteredItems = navItems.filter(
-    ({ adminOnly }) => !adminOnly || ['super_admin', 'company_admin'].includes(user?.role),
-  );
+  const filteredItems = filterNav(user?.role);
 
   useEffect(() => {
     if (open) document.body.style.overflow = 'hidden';
@@ -256,9 +264,7 @@ export default function AppLayout({ children }) {
             <span className="text-lg font-bold hidden sm:inline">MVG ERP</span>
           </div>
           <nav className="hidden md:flex items-center gap-1">
-            {navItems
-              .filter(({ adminOnly }) => !adminOnly || ['super_admin', 'company_admin'].includes(user?.role))
-              .map(({ to, label, icon: Icon }) => (
+            {filterNav(user?.role).map(({ to, label, icon: Icon }) => (
                 <NavLink
                   key={to}
                   to={to}

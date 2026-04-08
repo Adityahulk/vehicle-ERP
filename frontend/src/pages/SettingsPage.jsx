@@ -551,6 +551,7 @@ function UsersTab() {
                     <SelectItem value="staff">Staff</SelectItem>
                     <SelectItem value="branch_manager">Branch Manager</SelectItem>
                     <SelectItem value="company_admin">Company Admin</SelectItem>
+                    <SelectItem value="ca">CA (Chartered Accountant)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -16,7 +16,7 @@ router.use(verifyToken);
 router.post('/clockin', clockIn);
 router.post('/clockout', clockOut);
 router.get('/me', myStatus);
-router.get('/today/:branchId', requireMinRole('branch_manager'), todayByBranch);
-router.get('/report', requireMinRole('branch_manager'), report);
+router.get('/today/:branchId', todayByBranch);
+router.get('/report', report);
 
 module.exports = router;

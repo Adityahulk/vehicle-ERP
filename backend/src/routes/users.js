@@ -12,7 +12,7 @@ const createUserSchema = z.object({
   email: z.string().email('Valid email required'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   phone: z.string().max(20).optional(),
-  role: z.enum(['company_admin', 'branch_manager', 'staff']),
+  role: z.enum(['company_admin', 'branch_manager', 'staff', 'ca']),
   branch_id: z.string().uuid().optional(),
 });
 
@@ -20,7 +20,7 @@ const updateUserSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   email: z.string().email().optional(),
   phone: z.string().max(20).optional(),
-  role: z.enum(['company_admin', 'branch_manager', 'staff']).optional(),
+  role: z.enum(['company_admin', 'branch_manager', 'staff', 'ca']).optional(),
   branch_id: z.string().uuid().nullable().optional(),
   is_active: z.boolean().optional(),
 });

@@ -110,6 +110,12 @@ async function seed() {
       [companyId, panaji.id, hash],
     );
 
+    await client.query(
+      `INSERT INTO users (company_id, branch_id, name, email, password_hash, phone, role)
+       VALUES ($1, $2, 'CA Ramesh Pai', 'ca@demo.com', $3, '9876543216', 'ca')`,
+      [companyId, mapusa.id, hash],
+    );
+
     // Assign managers to branches
     await client.query(`UPDATE branches SET manager_id = $1 WHERE id = $2`, [manager1.id, mapusa.id]);
     await client.query(`UPDATE branches SET manager_id = $1 WHERE id = $2`, [manager2.id, panaji.id]);
@@ -290,6 +296,7 @@ async function seed() {
     console.log('  ║  manager2@demo.com → branch_manager (MVG Panaji)      ║');
     console.log('  ║  staff1@demo.com   → staff (MVG Mapusa)               ║');
     console.log('  ║  staff2@demo.com   → staff (MVG Panaji)               ║');
+    console.log('  ║  ca@demo.com       → ca (Chartered Accountant)        ║');
     console.log('  ║                                                       ║');
     console.log('  ╚═══════════════════════════════════════════════════════╝');
     console.log('');
