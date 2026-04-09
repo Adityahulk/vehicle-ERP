@@ -6,7 +6,6 @@ const cors = require('cors');
 const morgan = require('morgan');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
-const { ipKeyGenerator } = rateLimit;
 const { pool } = require('./config/db');
 const { errorHandler } = require('./middleware/errorHandler');
 
@@ -26,14 +25,14 @@ app.set('trust proxy', 1);
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 // --------------- Rate Limiters ---------------
+// No custom keyGenerator — express-rate-limit v7+ defaults are IPv6-safe with app.set('trust proxy', …).
+// A custom (req) => req.ip triggers ERR_ERL_KEY_GEN_IPV6 validation even when “fixed” on some builds.
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: 'Too many login attempts. Try again in 15 minutes.' },
-  // Required by express-rate-limit v7+ when keying by IP behind proxies (IPv6-safe).
-  keyGenerator: (req) => ipKeyGenerator(req.ip ?? ''),
 });
 
 const apiLimiter = rateLimit({
