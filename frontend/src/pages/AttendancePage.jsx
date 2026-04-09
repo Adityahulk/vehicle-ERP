@@ -161,11 +161,13 @@ function TodayTable() {
 
   const { summary, users } = data;
 
+  const isStaff = user?.role === 'staff';
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <Users className="h-4 w-4" /> Today's Branch Attendance
+          <Users className="h-4 w-4" /> {isStaff ? "My Attendance Today" : "Today's Branch Attendance"}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -230,12 +232,14 @@ function ReportSection() {
   const [to, setTo] = useState(today);
   const [branchId, setBranchId] = useState('');
 
-  const isManager = ['branch_manager', 'company_admin', 'super_admin'].includes(user?.role);
+  const isAdmin = ['company_admin', 'super_admin'].includes(user?.role);
+  const isManager = user?.role === 'branch_manager';
+  const showBranchFilter = isAdmin || isManager;
 
   const { data: branches } = useQuery({
     queryKey: ['branches'],
     queryFn: () => api.get('/branches').then((r) => r.data.branches),
-    enabled: isManager,
+    enabled: isAdmin,
   });
 
   const { data, isLoading, refetch } = useQuery({
@@ -270,12 +274,10 @@ function ReportSection() {
     URL.revokeObjectURL(a.href);
   };
 
-  if (!isManager) return null;
-
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Attendance Report</CardTitle>
+        <CardTitle className="text-base">{user?.role === 'staff' ? 'My Attendance History' : 'Attendance Report'}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex flex-wrap items-end gap-3 mb-4">
@@ -287,15 +289,17 @@ function ReportSection() {
             <Label>To</Label>
             <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" />
           </div>
-          <div className="space-y-1">
-            <Label>Branch</Label>
-            <Select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="w-44">
-              <option value="">All Branches</option>
-              {(branches || []).map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </Select>
-          </div>
+          {showBranchFilter && (
+            <div className="space-y-1">
+              <Label>Branch</Label>
+              <Select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="w-44">
+                <option value="">All Branches</option>
+                {(branches || []).map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </Select>
+            </div>
+          )}
           <Button onClick={() => refetch()} disabled={isLoading}>
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
             Generate
