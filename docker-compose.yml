@@ -28,6 +28,20 @@ services:
       timeout: 3s
       retries: 10
 
+  # Browser UI for Postgres (Adminer). Default: only reachable on the host (127.0.0.1), not the public internet.
+  # From your laptop: ssh -L 8080:127.0.0.1:8080 user@server  then open http://127.0.0.1:8080
+  # Login: System = PostgreSQL, Server = postgres (or 172.29.44.10), User/Password/DB = same as DB_* in .env
+  adminer:
+    image: adminer:latest
+    container_name: vehicle_erp_adminer
+    restart: unless-stopped
+    networks: [erp]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${ADMINER_BIND:-127.0.0.1}:${ADMINER_PORT:-8080}:8080"
+
   redis:
     image: redis:7-alpine
     container_name: vehicle_erp_redis
