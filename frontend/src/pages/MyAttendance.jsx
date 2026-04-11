@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import api from '@/lib/api';
-import { formatDate, cn } from '@/lib/utils';
+import { formatDate, cn, istYmd } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
   Clock, LogIn, LogOut, Loader2, CheckCircle2, CalendarPlus,
@@ -215,9 +215,12 @@ function MiniCalendar() {
 
   function cellMeta(ds, dow) {
     if (dow === 0) return { kind: 'sun' };
+    const todayStr = istYmd();
+    if (ds > todayStr) return { kind: 'upcoming', rec: null };
     const rec = byDate[ds];
     if (rec?.status === 'on_leave') return { kind: 'leave', rec };
     if (rec?.clock_in) return { kind: 'present', rec };
+    if (ds === todayStr) return { kind: 'pending', rec: null };
     return { kind: 'absent', rec: null };
   }
 
@@ -257,6 +260,8 @@ function MiniCalendar() {
             else if (meta.kind === 'leave') dot = 'bg-blue-500';
             else if (meta.kind === 'present') dot = 'bg-emerald-500';
             else if (meta.kind === 'absent') dot = 'bg-red-500';
+            else if (meta.kind === 'upcoming') dot = 'bg-muted-foreground/20';
+            else if (meta.kind === 'pending') dot = 'bg-amber-400';
 
             const title =
               meta.kind === 'sun'
@@ -265,7 +270,11 @@ function MiniCalendar() {
                   ? 'On leave'
                   : meta.kind === 'present'
                     ? `In ${formatTime(meta.rec.clock_in)} · Out ${formatTime(meta.rec.clock_out)}`
-                    : 'Absent';
+                    : meta.kind === 'upcoming'
+                      ? 'Upcoming'
+                      : meta.kind === 'pending'
+                        ? 'Today — not clocked in yet'
+                        : 'Absent';
 
             return (
               <button
@@ -287,6 +296,8 @@ function MiniCalendar() {
             <p className="font-medium mb-1">{tip.ds}</p>
             {tip.meta.kind === 'sun' && <p className="text-muted-foreground">Sunday</p>}
             {tip.meta.kind === 'leave' && <p className="text-blue-600">On leave</p>}
+            {tip.meta.kind === 'upcoming' && <p className="text-muted-foreground">Upcoming day</p>}
+            {tip.meta.kind === 'pending' && <p className="text-amber-700 dark:text-amber-400">Today — clock in when you start</p>}
             {tip.meta.kind === 'absent' && <p className="text-red-600">Absent / no clock-in</p>}
             {tip.meta.kind === 'present' && tip.meta.rec && (
               <p className="text-muted-foreground">
@@ -495,7 +506,9 @@ export default function MyAttendance() {
     <AppLayout>
       <div className="mb-6 max-w-3xl">
         <h2 className="text-2xl font-semibold">Attendance</h2>
-        <p className="text-sm text-muted-foreground">Clock in, view your month, and manage leave in one place.</p>
+        <p className="text-sm text-muted-foreground">
+          Clock in/out, view your month, and manage leave. Admins review everyone under Team attendance.
+        </p>
       </div>
 
       <div className="max-w-3xl space-y-6">

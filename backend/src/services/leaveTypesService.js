@@ -3,6 +3,7 @@ const { query } = require('../config/db');
 const DEFAULT_TYPES = [
   { code: 'CL', name: 'Casual Leave', days_per_year: 12, is_paid: true, carry_forward: false },
   { code: 'SL', name: 'Sick Leave', days_per_year: 6, is_paid: true, carry_forward: false },
+  { code: 'EL', name: 'Earned Leave', days_per_year: 12, is_paid: true, carry_forward: true },
   { code: 'LWP', name: 'Leave Without Pay', days_per_year: 0, is_paid: false, carry_forward: false },
 ];
 

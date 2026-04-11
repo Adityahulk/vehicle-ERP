@@ -28,6 +28,7 @@ import useAuthStore from './store/authStore';
 
 const ADMIN_ROLES = ['super_admin', 'company_admin'];
 const MANAGER_ROLES = ['super_admin', 'company_admin', 'branch_manager'];
+const MY_ATTENDANCE_ROLES = ['staff', 'branch_manager', 'company_admin', 'super_admin'];
 
 function DefaultRedirect() {
   const { user } = useAuthStore();
@@ -57,7 +58,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-            <Route element={<ProtectedRoute allowedRoles={['staff']} />}>
+            <Route element={<ProtectedRoute allowedRoles={MY_ATTENDANCE_ROLES} />}>
               <Route path="/my-attendance" element={<MyAttendance />} />
             </Route>
 

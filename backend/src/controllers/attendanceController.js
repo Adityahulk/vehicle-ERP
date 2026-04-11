@@ -1,29 +1,55 @@
 const { query } = require('../config/db');
+const { istYmd } = require('../lib/istDate');
 
 async function clockIn(req, res) {
   try {
     const { id: user_id, company_id, branch_id } = req.user;
-    const today = new Date().toISOString().split('T')[0];
+    const today = istYmd();
 
     const existing = await query(
-      `SELECT id, clock_in, status FROM attendance
-       WHERE user_id = $1 AND company_id = $2 AND date = $3 AND is_deleted = FALSE`,
+      `SELECT id, clock_in, clock_out, status FROM attendance
+       WHERE user_id = $1 AND company_id = $2 AND date = $3::date AND is_deleted = FALSE`,
       [user_id, company_id, today],
     );
 
     if (existing.rows.length > 0) {
-      if (existing.rows[0].status === 'on_leave') {
+      const ex = existing.rows[0];
+      if (ex.status === 'on_leave') {
         return res.status(409).json({ error: 'You are marked on leave for today' });
       }
+      if (ex.clock_in && !ex.clock_out) {
+        return res.status(409).json({
+          error: 'Already clocked in today',
+          record: ex,
+        });
+      }
+      if (ex.clock_in && ex.clock_out) {
+        return res.status(409).json({
+          error: 'Attendance for today is already complete',
+          record: ex,
+        });
+      }
+    }
+
+    const { rows: openRows } = await query(
+      `SELECT id, date FROM attendance
+       WHERE user_id = $1 AND company_id = $2 AND is_deleted = FALSE
+         AND clock_in IS NOT NULL AND clock_out IS NULL
+         AND (status IS NULL OR status <> 'on_leave')
+         AND clock_in > NOW() - INTERVAL '48 hours'
+       LIMIT 1`,
+      [user_id, company_id],
+    );
+    if (openRows.length > 0) {
       return res.status(409).json({
-        error: 'Already clocked in today',
-        record: existing.rows[0],
+        error: 'You still have an open clock-in. Please clock out first.',
+        record: openRows[0],
       });
     }
 
     const { rows } = await query(
       `INSERT INTO attendance (company_id, branch_id, user_id, date, clock_in)
-       VALUES ($1, $2, $3, $4, NOW())
+       VALUES ($1, $2, $3, $4::date, NOW())
        RETURNING id, date, clock_in, clock_out, status`,
       [company_id, branch_id || null, user_id, today],
     );
@@ -38,26 +64,49 @@ async function clockIn(req, res) {
 async function clockOut(req, res) {
   try {
     const { id: user_id, company_id } = req.user;
-    const today = new Date().toISOString().split('T')[0];
+    const today = istYmd();
 
-    const existing = await query(
+    const byToday = await query(
       `SELECT id, clock_in, clock_out, status FROM attendance
-       WHERE user_id = $1 AND company_id = $2 AND date = $3 AND is_deleted = FALSE`,
+       WHERE user_id = $1 AND company_id = $2 AND date = $3::date AND is_deleted = FALSE`,
       [user_id, company_id, today],
     );
 
-    if (existing.rows.length === 0) {
+    let row = null;
+    if (byToday.rows.length > 0) {
+      const r = byToday.rows[0];
+      if (r.status === 'on_leave') {
+        return res.status(400).json({ error: 'Cannot clock out while on leave' });
+      }
+      if (r.clock_in && !r.clock_out) {
+        row = r;
+      }
+    }
+
+    if (!row) {
+      const { rows: openRows } = await query(
+        `SELECT id, clock_in, clock_out, status FROM attendance
+         WHERE user_id = $1 AND company_id = $2 AND is_deleted = FALSE
+           AND clock_in IS NOT NULL AND clock_out IS NULL
+           AND (status IS NULL OR status <> 'on_leave')
+           AND clock_in > NOW() - INTERVAL '48 hours'
+         ORDER BY clock_in DESC
+         LIMIT 1`,
+        [user_id, company_id],
+      );
+      if (openRows.length > 0) {
+        row = openRows[0];
+      }
+    }
+
+    if (!row) {
       return res.status(400).json({ error: 'No clock-in record found for today' });
     }
 
-    if (existing.rows[0].status === 'on_leave') {
-      return res.status(400).json({ error: 'Cannot clock out while on leave' });
-    }
-
-    if (existing.rows[0].clock_out) {
+    if (row.clock_out) {
       return res.status(409).json({
         error: 'Already clocked out today',
-        record: existing.rows[0],
+        record: row,
       });
     }
 
@@ -65,7 +114,7 @@ async function clockOut(req, res) {
       `UPDATE attendance SET clock_out = NOW()
        WHERE id = $1 AND is_deleted = FALSE
        RETURNING id, date, clock_in, clock_out, status`,
-      [existing.rows[0].id],
+      [row.id],
     );
 
     res.json({ attendance: rows[0] });
@@ -78,13 +127,29 @@ async function clockOut(req, res) {
 async function myStatus(req, res) {
   try {
     const { id: user_id, company_id } = req.user;
-    const today = new Date().toISOString().split('T')[0];
+    const today = istYmd();
 
-    const { rows } = await query(
+    let { rows } = await query(
       `SELECT id, date, clock_in, clock_out, status, notes FROM attendance
-       WHERE user_id = $1 AND company_id = $2 AND date = $3 AND is_deleted = FALSE`,
+       WHERE user_id = $1 AND company_id = $2 AND date = $3::date AND is_deleted = FALSE`,
       [user_id, company_id, today],
     );
+
+    if (!rows[0]) {
+      const { rows: openRows } = await query(
+        `SELECT id, date, clock_in, clock_out, status, notes FROM attendance
+         WHERE user_id = $1 AND company_id = $2 AND is_deleted = FALSE
+           AND clock_in IS NOT NULL AND clock_out IS NULL
+           AND (status IS NULL OR status <> 'on_leave')
+           AND clock_in > NOW() - INTERVAL '48 hours'
+         ORDER BY clock_in DESC
+         LIMIT 1`,
+        [user_id, company_id],
+      );
+      if (openRows.length > 0) {
+        rows = openRows;
+      }
+    }
 
     let hours_today = null;
     if (rows[0]?.clock_in && rows[0]?.clock_out) {
@@ -109,12 +174,12 @@ const VISIBLE_ROLES = {
   staff: [],
 };
 
-function workStatusForTodayRow(a) {
-  const hasRow = a && (a.clock_in != null || a.clock_out != null || a.status != null);
+function workStatusForTodayRow(u) {
+  const hasRow = u && (u.clock_in != null || u.clock_out != null || u.status != null);
   if (!hasRow) return 'not_clocked';
-  if (a.status === 'on_leave') return 'on_leave';
-  if (a.clock_in && a.clock_out) return 'present';
-  if (a.clock_in) return 'working';
+  if (u.status === 'on_leave') return 'on_leave';
+  if (u.clock_in && u.clock_out) return 'present';
+  if (u.clock_in) return 'working';
   return 'absent';
 }
 
@@ -122,7 +187,7 @@ async function todayByBranch(req, res) {
   try {
     const { company_id, role: callerRole, id: callerId } = req.user;
     const { branchId } = req.params;
-    const today = new Date().toISOString().split('T')[0];
+    const today = istYmd();
 
     const branchCheck = await query(
       `SELECT id FROM branches WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
@@ -150,7 +215,7 @@ async function todayByBranch(req, res) {
           total: rows.length,
           clocked_in: rows.filter((u) => u.clock_in && !u.clock_out).length,
           clocked_out: rows.filter((u) => u.clock_in && u.clock_out).length,
-          absent: rows.filter((u) => !u.clock_in && u.status !== 'on_leave').length,
+          absent: rows.filter((u) => u.work_status === 'absent').length,
           on_leave: rows.filter((u) => u.status === 'on_leave').length,
         },
         users: withStatus,
@@ -274,6 +339,7 @@ async function myMonthly(req, res) {
     if (month < 1 || month > 12) return res.status(400).json({ error: 'Invalid month' });
 
     const { first, last } = monthBounds(year, month);
+    const todayStr = istYmd();
 
     const { rows } = await query(
       `SELECT a.date, a.clock_in, a.clock_out, a.status, a.notes,
@@ -304,10 +370,11 @@ async function myMonthly(req, res) {
       const ds = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dow = new Date(y, m - 1, d).getDay();
       if (dow === 0) continue;
+      if (ds > todayStr) continue;
       const rec = byDate[ds];
       if (rec?.status === 'on_leave') onLeave += 1;
       else if (rec?.clock_in) present += 1;
-      else absent += 1;
+      else if (ds < todayStr) absent += 1;
     }
 
     const hoursSum = rows.reduce((acc, r) => acc + (Number(r.hours_worked) || 0), 0);

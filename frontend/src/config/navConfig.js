@@ -2,6 +2,7 @@ import {
   LayoutDashboard, Car, FileText, Landmark, Receipt,
   Clock, Settings,
   ShoppingCart, PackagePlus, PieChart, BarChart2,
+  Users,
 } from 'lucide-react';
 
 const ICON_MAP = {
@@ -16,6 +17,7 @@ const ICON_MAP = {
   Clock,
   Settings,
   PieChart,
+  Users,
 };
 
 /** Role → primary navigation (paths and icon keys). */
@@ -29,7 +31,8 @@ export const NAV_CONFIG = {
     { label: 'Loans', path: '/loans', icon: 'Landmark' },
     { label: 'Expenses', path: '/expenses', icon: 'Receipt' },
     { label: 'Reports', path: '/reports', icon: 'BarChart2' },
-    { label: 'Attendance', path: '/attendance', icon: 'Clock' },
+    { label: 'My clock', path: '/my-attendance', icon: 'Clock' },
+    { label: 'Team attendance', path: '/attendance', icon: 'Users' },
     { label: 'Settings', path: '/settings', icon: 'Settings' },
   ],
   branch_manager: [
@@ -40,7 +43,8 @@ export const NAV_CONFIG = {
     { label: 'Quotations', path: '/quotations', icon: 'FileText' },
     { label: 'Loans', path: '/loans', icon: 'Landmark' },
     { label: 'Expenses', path: '/expenses', icon: 'Receipt' },
-    { label: 'Attendance', path: '/attendance', icon: 'Clock' },
+    { label: 'My clock', path: '/my-attendance', icon: 'Clock' },
+    { label: 'Team attendance', path: '/attendance', icon: 'Users' },
   ],
   ca: [
     { label: 'Finance Overview', path: '/ca/dashboard', icon: 'PieChart' },
@@ -75,8 +79,8 @@ export function navItemsForRole(role) {
 
 /** Desktop top bar: keep a short primary row; rest go under "More" (reduces clutter). */
 const DESKTOP_PRIMARY_PATHS = {
-  company_admin: ['/dashboard', '/inventory', '/sales', '/attendance'],
-  branch_manager: ['/branch-dashboard', '/inventory', '/sales', '/attendance'],
+  company_admin: ['/dashboard', '/inventory', '/sales', '/my-attendance', '/attendance'],
+  branch_manager: ['/branch-dashboard', '/inventory', '/sales', '/my-attendance', '/attendance'],
 };
 
 /**

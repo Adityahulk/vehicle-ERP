@@ -73,6 +73,20 @@ export function toInputDate(dateStr) {
   return new Date(dateStr).toISOString().slice(0, 10);
 }
 
+/** Calendar YYYY-MM-DD in Asia/Kolkata (matches attendance backend). */
+export function istYmd(d = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(d);
+  const y = parts.find((p) => p.type === 'year').value;
+  const m = parts.find((p) => p.type === 'month').value;
+  const day = parts.find((p) => p.type === 'day').value;
+  return `${y}-${m}-${day}`;
+}
+
 /**
  * Unique id for client-only keys (e.g. sortable row ids). Uses randomUUID when
  * available; on plain HTTP many browsers omit randomUUID (secure context only).

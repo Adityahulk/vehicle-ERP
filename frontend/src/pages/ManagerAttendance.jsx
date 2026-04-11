@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import api from '@/lib/api';
 import useAuthStore from '@/store/authStore';
-import { formatDate, cn } from '@/lib/utils';
+import { formatDate, cn, istYmd } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
   Users, Loader2, CheckCircle2, XCircle, MinusCircle, Plane, Download,
@@ -225,6 +225,7 @@ function MonthlyTab({ branchId }) {
 
   const grid = useMemo(() => {
     if (!data?.users) return [];
+    const todayIst = istYmd();
     return data.users.map((u) => {
       const row = { user: u, cells: [] };
       for (let d = 1; d <= lastDay; d += 1) {
@@ -235,6 +236,9 @@ function MonthlyTab({ branchId }) {
         if (dow === 0) {
           code = 'S';
           title = 'Sunday';
+        } else if (ds > todayIst) {
+          code = 'F';
+          title = 'Upcoming';
         } else {
           const rec = data.attendanceByUser?.[u.id]?.[ds];
           if (rec?.status === 'on_leave') {
@@ -243,6 +247,9 @@ function MonthlyTab({ branchId }) {
           } else if (rec?.clock_in) {
             code = 'P';
             title = `Present · ${formatTime(rec.clock_in)}–${formatTime(rec.clock_out)}`;
+          } else if (ds === todayIst) {
+            code = 'T';
+            title = 'Today — pending clock-in';
           }
         }
         row.cells.push({ d, code, title, ds });
@@ -311,6 +318,8 @@ function MonthlyTab({ branchId }) {
                         c.code === 'A' && 'bg-red-50 text-red-800 dark:bg-red-950/50',
                         c.code === 'L' && 'bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-200',
                         c.code === 'S' && 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800',
+                        c.code === 'F' && 'bg-muted/40 text-muted-foreground',
+                        c.code === 'T' && 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200',
                       )}
                     >
                       {c.code}
@@ -321,7 +330,9 @@ function MonthlyTab({ branchId }) {
             </tbody>
           </table>
         )}
-        <p className="text-xs text-muted-foreground mt-3">P present · A absent · L leave · S Sunday</p>
+        <p className="text-xs text-muted-foreground mt-3">
+          P present · A absent · L leave · S Sunday · F upcoming · T today (pending)
+        </p>
       </CardContent>
     </Card>
   );

@@ -1,9 +1,10 @@
 const { query, getClient } = require('../config/db');
-const { getLeaveTypeById } = require('../services/leaveTypesService');
+const { getLeaveTypeById, seedDefaultLeaveTypes } = require('../services/leaveTypesService');
 const { sendWhatsApp } = require('../services/notificationService');
+const { istYmd } = require('../lib/istDate');
 
 function todayYmd() {
-  return new Date().toISOString().split('T')[0];
+  return istYmd();
 }
 
 function rowDate(d) {
@@ -195,11 +196,21 @@ async function leaveMy(req, res) {
     const { id: userId, company_id: companyId } = req.user;
     const year = Number(req.query.year) || new Date().getFullYear();
 
-    const { rows: types } = await query(
+    let { rows: types } = await query(
       `SELECT id, name, code, days_per_year, is_paid FROM leave_types
        WHERE company_id = $1 AND is_active = TRUE ORDER BY code`,
       [companyId],
     );
+
+    if (types.length === 0) {
+      await seedDefaultLeaveTypes(companyId);
+      const again = await query(
+        `SELECT id, name, code, days_per_year, is_paid FROM leave_types
+         WHERE company_id = $1 AND is_active = TRUE ORDER BY code`,
+        [companyId],
+      );
+      types = again.rows;
+    }
 
     const balances = [];
     for (const t of types) {
