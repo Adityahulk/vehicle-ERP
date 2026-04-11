@@ -16,7 +16,10 @@ services:
       POSTGRES_USER: ${DB_USER:-erp_user}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       POSTGRES_DB: ${DB_NAME:-vehicle_erp}
-    networks: [erp]
+    networks:
+      erp:
+        # Static IP avoids Docker DNS failures (EAI_AGAIN on hostname "postgres") on some hosts / mixed static+dynamic compose networks
+        ipv4_address: 172.29.44.10
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -30,7 +33,9 @@ services:
     container_name: vehicle_erp_redis
     restart: unless-stopped
     command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
-    networks: [erp]
+    networks:
+      erp:
+        ipv4_address: 172.29.44.21
     volumes:
       - redisdata:/data
     healthcheck:
@@ -56,8 +61,9 @@ services:
       PORT: 4000
       # Must accept connections from nginx container — do not override with 127.0.0.1 in .env
       LISTEN_HOST: 0.0.0.0
-      DATABASE_URL: postgresql://${DB_USER:-erp_user}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-vehicle_erp}
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://${DB_USER:-erp_user}:${DB_PASSWORD}@172.29.44.10:5432/${DB_NAME:-vehicle_erp}
+      REDIS_URL: redis://172.29.44.21:6379
+      PGHOST: 172.29.44.10
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY:-15m}
       JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-7d}
@@ -92,8 +98,9 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${DB_USER:-erp_user}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-vehicle_erp}
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://${DB_USER:-erp_user}:${DB_PASSWORD}@172.29.44.10:5432/${DB_NAME:-vehicle_erp}
+      REDIS_URL: redis://172.29.44.21:6379
+      PGHOST: 172.29.44.10
       JWT_SECRET: ${JWT_SECRET}
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
