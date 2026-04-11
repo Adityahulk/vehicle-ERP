@@ -72,3 +72,22 @@ export function toInputDate(dateStr) {
   if (!dateStr) return '';
   return new Date(dateStr).toISOString().slice(0, 10);
 }
+
+/**
+ * Unique id for client-only keys (e.g. sortable row ids). Uses randomUUID when
+ * available; on plain HTTP many browsers omit randomUUID (secure context only).
+ */
+export function randomClientId() {
+  const c = typeof globalThis !== 'undefined' ? globalThis.crypto : undefined;
+  if (c?.randomUUID) return c.randomUUID();
+  if (c?.getRandomValues) {
+    const b = new Uint8Array(16);
+    c.getRandomValues(b);
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    let s = '';
+    for (let i = 0; i < 16; i++) s += (0x100 + b[i]).toString(16).slice(1);
+    return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20)}`;
+  }
+  return `cid-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}

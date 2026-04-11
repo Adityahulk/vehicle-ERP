@@ -28,7 +28,7 @@ import QuotationPreviewModal from '@/components/QuotationPreviewModal';
 import api from '@/lib/api';
 import useAuthStore from '@/store/authStore';
 import { computeQuotationTotals, gstStateFromGstin } from '@/lib/quotationTotals';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, randomClientId } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
   Loader2, GripVertical, Trash2, Plus,
@@ -48,7 +48,7 @@ const GST_OPTIONS = [0, 5, 12, 18, 28];
 
 function newLine(overrides = {}) {
   return {
-    id: crypto.randomUUID(),
+    id: randomClientId(),
     item_type: 'other',
     description: '',
     hsn_code: '',
@@ -203,7 +203,7 @@ export default function QuotationFormPage() {
     }
     setLines(
       (editData.items || []).map((it) => newLine({
-        id: it.id || crypto.randomUUID(),
+        id: it.id || randomClientId(),
         item_type: it.item_type,
         description: it.description,
         hsn_code: it.hsn_code || '',
