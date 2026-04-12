@@ -1,6 +1,8 @@
 const { Queue, Worker } = require('bullmq');
 const redis = require('../config/redis');
-const { processOverduePenalties, sendPenaltyWhatsApp } = require('../services/penaltyService');
+const { query } = require('../config/db');
+const { updateLoanPenalties } = require('../services/penaltyService');
+const { loanReminderQueue } = require('./loanReminderJob');
 
 const QUEUE_NAME = 'penalty-processing';
 
@@ -13,37 +15,54 @@ async function schedulePenaltyJob() {
   }
 
   await penaltyQueue.add(
-    'daily-penalty-check',
+    'daily-penalty-update',
     {},
     {
-      repeat: { pattern: '0 30 2 * * *' }, // 2:30 AM UTC = 8:00 AM IST
+      repeat: { pattern: '35 18 * * *' },
       removeOnComplete: { count: 30 },
       removeOnFail: { count: 50 },
     },
   );
 
-  console.log('[PenaltyJob] Daily penalty check scheduled at 8:00 AM IST');
+  console.log('[PenaltyJob] Scheduled dailyPenaltyUpdate at 00:05 AM IST (18:35 UTC)');
 }
 
 function createPenaltyWorker() {
   const worker = new Worker(
     QUEUE_NAME,
     async () => {
-      console.log('[PenaltyJob] Running daily penalty check...');
-      const updatedLoans = await processOverduePenalties();
-      console.log(`[PenaltyJob] Updated ${updatedLoans.length} overdue loans`);
+      console.log('[PenaltyJob] Running daily penalty update...');
+      const result = await updateLoanPenalties(null);
+      console.log('[PenaltyJob] Done:', {
+        updated: result.updated,
+        unchanged: result.unchanged,
+        milestones: result.milestones?.length || 0,
+        errors: result.errors?.length || 0,
+      });
 
-      for (const loan of updatedLoans) {
-        await sendPenaltyWhatsApp(loan);
+      try {
+        await query(
+          `INSERT INTO job_logs (job_name, result) VALUES ($1, $2::jsonb)`,
+          ['dailyPenaltyUpdate', JSON.stringify(result)],
+        );
+      } catch (e) {
+        console.error('[PenaltyJob] job_logs insert failed:', e.message);
       }
 
-      return { processed: updatedLoans.length };
+      for (const m of result.milestones || []) {
+        await loanReminderQueue.add('penalty-milestone', m, {
+          removeOnComplete: 80,
+          removeOnFail: 30,
+        });
+      }
+
+      return result;
     },
     { connection: redis },
   );
 
-  worker.on('completed', (job, result) => {
-    console.log(`[PenaltyJob] Completed: ${result.processed} loans processed`);
+  worker.on('completed', (job, res) => {
+    console.log(`[PenaltyJob] ${job.name} completed: updated=${res?.updated}, unchanged=${res?.unchanged}`);
   });
 
   worker.on('failed', (job, err) => {
@@ -53,8 +72,6 @@ function createPenaltyWorker() {
   return worker;
 }
 
-// Auto-start worker when not in production (dev mode — API process handles it)
-// In production, worker.js imports createPenaltyWorker() explicitly
 const penaltyWorker = process.env.NODE_ENV !== 'production' ? createPenaltyWorker() : null;
 
 module.exports = { penaltyQueue, penaltyWorker, schedulePenaltyJob, createPenaltyWorker };

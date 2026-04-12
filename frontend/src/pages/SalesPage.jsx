@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import BulkImport from '@/components/BulkImport';
 import InvoicePreviewModal from '@/components/InvoicePreviewModal';
+import WhatsAppSendDialog, { WhatsAppIconButton } from '@/components/WhatsAppSendDialog';
 import { toast } from 'sonner';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import api from '@/lib/api';
@@ -417,7 +418,21 @@ export default function SalesPage() {
   const [filters, setFilters] = useState({ page: 1, limit: 25, status: '', customer_search: '' });
   const [searchInput, setSearchInput] = useState('');
   const [previewInvoice, setPreviewInvoice] = useState(null);
+  const [waDialog, setWaDialog] = useState(null);
+  const [waMeta, setWaMeta] = useState({});
   const [pdfTemplateChoice, setPdfTemplateChoice] = useState({});
+
+  const markInvoiceWaSent = useCallback((invoiceId) => {
+    const now = Date.now();
+    setWaMeta((u) => ({ ...u, [invoiceId]: { lastSent: now, flash: true } }));
+    setTimeout(() => {
+      setWaMeta((u) => {
+        const cur = u[invoiceId];
+        if (!cur) return u;
+        return { ...u, [invoiceId]: { ...cur, flash: false } };
+      });
+    }, 3000);
+  }, []);
   const { data: invoiceTemplates = [] } = useQuery({
     queryKey: ['invoice-templates'],
     queryFn: () => api.get('/invoice-templates').then((r) => r.data.templates),
@@ -643,6 +658,17 @@ export default function SalesPage() {
                           >
                             <Download className="h-3.5 w-3.5" />
                           </Button>
+                          {canWrite && (
+                            <WhatsAppIconButton
+                              title="Send invoice on WhatsApp"
+                              lastSentAt={waMeta[inv.id]?.lastSent}
+                              flashCheck={waMeta[inv.id]?.flash}
+                              onClick={() => setWaDialog({
+                                id: inv.id,
+                                name: inv.customer_name,
+                              })}
+                            />
+                          )}
                         </>
                       )}
                       {eInvoiceStatus?.enabled && inv.status === 'confirmed' && (!inv.irn_status || inv.irn_status === 'pending' || inv.irn_status === 'failed') && canWrite && (
@@ -708,6 +734,18 @@ export default function SalesPage() {
         invoiceNumber={previewInvoice?.invoice_number}
         templates={invoiceTemplates}
         defaultTemplateId={previewInvoice?.id ? pdfTemplateChoice[previewInvoice.id] : undefined}
+      />
+
+      <WhatsAppSendDialog
+        key={waDialog ? `wa-inv-${waDialog.id}` : 'wa-inv-closed'}
+        open={!!waDialog}
+        onOpenChange={(o) => { if (!o) setWaDialog(null); }}
+        kind="invoice"
+        entityId={waDialog?.id}
+        customerName={waDialog?.name}
+        onAppSendSuccess={({ kind, entityId }) => {
+          if (kind === 'invoice' && entityId) markInvoiceWaSent(entityId);
+        }}
       />
     </AppLayout>
   );

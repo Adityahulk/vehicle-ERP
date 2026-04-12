@@ -27,21 +27,13 @@ async function processOverdueLoans() {
   let notified = 0;
 
   for (const loan of loans) {
-    const { overdue_days, penalty_amount } = calculatePenalty(loan);
-
-    if (penalty_amount !== Number(loan.total_penalty_accrued)) {
-      await query(
-        `UPDATE loans SET total_penalty_accrued = $1, status = 'overdue' WHERE id = $2`,
-        [penalty_amount, loan.id],
-      );
-    }
-
+    const calc = calculatePenalty(loan);
     if (loan.customer_phone) {
       await sendTemplatedNotification('LOAN_OVERDUE', {
         name: loan.customer_name,
         chassis: loan.chassis_number || 'N/A',
-        days: overdue_days,
-        penalty: (penalty_amount / 100).toFixed(2),
+        days: calc.calendarDaysPastDue,
+        penalty: (calc.netPenalty / 100).toFixed(2),
         branch_phone: loan.branch_phone || 'our office',
       }, loan.customer_phone);
       notified++;

@@ -66,6 +66,9 @@ app.use('/api/purchases', require('./routes/purchases'));
 app.use('/api/import', require('./routes/import'));
 app.use('/api/invoice-templates', require('./routes/invoiceTemplates'));
 app.use('/api/public', require('./routes/publicQuotations'));
+app.use('/api/share', require('./routes/share'));
+app.use('/api/whatsapp', require('./routes/whatsapp'));
+app.use('/api/employees', require('./routes/employees'));
 
 // --------------- 404 Handler ---------------
 app.use((_req, res) => {
@@ -84,6 +87,9 @@ scheduleReminderJobs().catch((err) => console.error('Failed to schedule reminder
 
 const { scheduleQuotationExpiryJob } = require('./jobs/quotationExpiryJob');
 scheduleQuotationExpiryJob().catch((err) => console.error('Failed to schedule quotation expiry job:', err.message));
+
+const { scheduleLoanReminderJob } = require('./jobs/loanReminderJob');
+scheduleLoanReminderJob().catch((err) => console.error('Failed to schedule loan reminder job:', err.message));
 
 // --------------- Start Server ---------------
 const PORT = Number(process.env.PORT) || 4000;

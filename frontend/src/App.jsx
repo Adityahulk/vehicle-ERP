@@ -11,6 +11,7 @@ import SalesPage from './pages/SalesPage';
 import LoansPage from './pages/LoansPage';
 import ExpensesPage from './pages/ExpensesPage';
 import SettingsPage from './pages/SettingsPage';
+import EmployeeProfile from './pages/EmployeeProfile';
 import ReportsPage from './pages/ReportsPage';
 import MyAttendance from './pages/MyAttendance';
 import ManagerAttendance from './pages/ManagerAttendance';
@@ -29,6 +30,7 @@ import useAuthStore from './store/authStore';
 const ADMIN_ROLES = ['super_admin', 'company_admin'];
 const MANAGER_ROLES = ['super_admin', 'company_admin', 'branch_manager'];
 const MY_ATTENDANCE_ROLES = ['staff', 'branch_manager', 'company_admin', 'super_admin'];
+const EMPLOYEE_PROFILE_ROLES = ['staff', 'branch_manager', 'company_admin', 'super_admin'];
 
 function DefaultRedirect() {
   const { user } = useAuthStore();
@@ -122,6 +124,10 @@ export default function App() {
 
             <Route element={<ProtectedRoute allowedRoles={['super_admin', 'company_admin']} />}>
               <Route path="/settings" element={<SettingsPage />} />
+            </Route>
+
+            <Route element={<ProtectedRoute allowedRoles={EMPLOYEE_PROFILE_ROLES} />}>
+              <Route path="/employees/:userId" element={<EmployeeProfile />} />
             </Route>
 
             <Route path="*" element={<DefaultRedirect />} />

@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import AppLayout from '@/components/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -211,6 +212,8 @@ function TodayTab({ branchId }) {
 }
 
 function MonthlyTab({ branchId }) {
+  const [searchParams] = useSearchParams();
+  const filterUserId = searchParams.get('user_id');
   const now = new Date();
   const [y, setY] = useState(now.getFullYear());
   const [m, setM] = useState(now.getMonth() + 1);
@@ -225,8 +228,9 @@ function MonthlyTab({ branchId }) {
 
   const grid = useMemo(() => {
     if (!data?.users) return [];
+    const users = filterUserId ? data.users.filter((u) => u.id === filterUserId) : data.users;
     const todayIst = istYmd();
-    return data.users.map((u) => {
+    return users.map((u) => {
       const row = { user: u, cells: [] };
       for (let d = 1; d <= lastDay; d += 1) {
         const ds = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -256,7 +260,7 @@ function MonthlyTab({ branchId }) {
       }
       return row;
     });
-  }, [data, y, m, lastDay]);
+  }, [data, y, m, lastDay, filterUserId]);
 
   const exportCsv = () => {
     if (!data?.users?.length) return;
@@ -552,6 +556,7 @@ function LeaveRequestsTab({ branchId }) {
 export default function ManagerAttendance() {
   const { user } = useAuthStore();
   const isAdmin = ['company_admin', 'super_admin'].includes(user?.role);
+  const [searchParams] = useSearchParams();
 
   const { data: branches } = useQuery({
     queryKey: ['branches'],
@@ -560,6 +565,13 @@ export default function ManagerAttendance() {
   });
 
   const [branchId, setBranchId] = useState('');
+
+  useEffect(() => {
+    const fromUrl = searchParams.get('branch_id');
+    if (fromUrl && fromUrl !== branchId) {
+      setBranchId(fromUrl);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (branchId) return;
@@ -573,6 +585,7 @@ export default function ManagerAttendance() {
     enabled: !!branchId,
   });
   const pendingTabBadge = pendingList?.length ?? 0;
+  const defaultTab = searchParams.get('tab') === 'monthly' ? 'monthly' : 'today';
 
   return (
     <AppLayout>
@@ -595,7 +608,7 @@ export default function ManagerAttendance() {
         )}
       </div>
 
-      <Tabs defaultValue="today">
+      <Tabs defaultValue={defaultTab} key={`${defaultTab}-${searchParams.toString()}`}>
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="today">Today</TabsTrigger>
           <TabsTrigger value="monthly">Monthly</TabsTrigger>

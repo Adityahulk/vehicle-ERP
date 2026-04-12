@@ -25,29 +25,10 @@ function formatPhone(phone) {
  * Returns { success, sid? } or { success: false, reason }.
  */
 async function sendWhatsApp(phone, message) {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const fromNumber = process.env.TWILIO_WHATSAPP_FROM;
-
-  const to = formatPhone(phone);
-  if (!accountSid || !authToken || !fromNumber || !to) {
-    console.log(`[Notification] WhatsApp skipped — missing config or phone`);
-    return { success: false, reason: 'missing_config' };
-  }
-
-  try {
-    const twilio = require('twilio')(accountSid, authToken);
-    const result = await twilio.messages.create({
-      body: message,
-      from: `whatsapp:${fromNumber}`,
-      to: `whatsapp:${to}`,
-    });
-    console.log(`[Notification] WhatsApp sent to ${to} — SID: ${result.sid}`);
-    return { success: true, sid: result.sid };
-  } catch (err) {
-    console.error(`[Notification] WhatsApp failed for ${to}:`, err.message);
-    return { success: false, reason: err.message };
-  }
+  const { sendRawWhatsApp } = require('./whatsappService');
+  const r = await sendRawWhatsApp(phone, message);
+  if (r.success) return { success: true, sid: r.sid };
+  return { success: false, reason: r.reason || 'send_failed' };
 }
 
 /**

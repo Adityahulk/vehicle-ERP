@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import BulkImport from '@/components/BulkImport';
+import WhatsAppSendDialog, { WhatsAppIconButton } from '@/components/WhatsAppSendDialog';
 import api from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import ReadOnlyBadge from '@/components/ReadOnlyBadge';
@@ -44,6 +45,20 @@ export default function QuotationsPage() {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [importOpen, setImportOpen] = useState(false);
+  const [waDialog, setWaDialog] = useState(null);
+  const [waMeta, setWaMeta] = useState({});
+
+  const markQuotationWaSent = useCallback((quotationId) => {
+    const now = Date.now();
+    setWaMeta((u) => ({ ...u, [quotationId]: { lastSent: now, flash: true } }));
+    setTimeout(() => {
+      setWaMeta((u) => {
+        const cur = u[quotationId];
+        if (!cur) return u;
+        return { ...u, [quotationId]: { ...cur, flash: false } };
+      });
+    }, 3000);
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput), 400);
@@ -213,6 +228,17 @@ export default function QuotationsPage() {
                       <Button variant="ghost" size="sm" title="PDF" onClick={() => downloadPdf(q.id, q.quotation_number)}>
                         <FileDown className="h-3.5 w-3.5" />
                       </Button>
+                      {canWrite && ['sent', 'accepted'].includes(q.status) && (
+                        <WhatsAppIconButton
+                          title="Send quotation on WhatsApp"
+                          lastSentAt={waMeta[q.id]?.lastSent}
+                          flashCheck={waMeta[q.id]?.flash}
+                          onClick={() => setWaDialog({
+                            id: q.id,
+                            name: q.customer_display_name || 'Customer',
+                          })}
+                        />
+                      )}
                       {canWrite && (
                         <Button variant="ghost" size="sm" title="Share link" onClick={() => copyShare(q.id)}>
                           <Link2 className="h-3.5 w-3.5" />
@@ -226,6 +252,18 @@ export default function QuotationsPage() {
           </TableBody>
         </Table>
       </div>
+
+      <WhatsAppSendDialog
+        key={waDialog ? `wa-q-${waDialog.id}` : 'wa-q-closed'}
+        open={!!waDialog}
+        onOpenChange={(o) => { if (!o) setWaDialog(null); }}
+        kind="quotation"
+        entityId={waDialog?.id}
+        customerName={waDialog?.name}
+        onAppSendSuccess={({ kind, entityId }) => {
+          if (kind === 'quotation' && entityId) markQuotationWaSent(entityId);
+        }}
+      />
     </AppLayout>
   );
 }

@@ -15,6 +15,37 @@ import {
 import { formatCurrency, formatDate, cn } from '@/lib/utils';
 import api from '@/lib/api';
 import useAuthStore from '@/store/authStore';
+import WhatsAppSendDialog from '@/components/WhatsAppSendDialog';
+import { usePermissions } from '@/hooks/usePermissions';
+
+function startOfLocalDay(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function loanOverdueDays(loan) {
+  if (!loan.due_date) return 0;
+  const due = startOfLocalDay(loan.due_date);
+  const today = startOfLocalDay(new Date());
+  const diff = Math.floor((today - due) / 86400000);
+  return diff > 0 ? diff : 0;
+}
+
+function isLoanPastDue(loan) {
+  if (!loan.due_date || !['active', 'overdue'].includes(loan.status)) return false;
+  return loanOverdueDays(loan) > 0;
+}
+
+function lastReminderLabel(dateStr) {
+  if (!dateStr) return null;
+  const sent = startOfLocalDay(dateStr);
+  const today = startOfLocalDay(new Date());
+  const diffDays = Math.floor((today - sent) / 86400000);
+  if (diffDays === 0) return 'today';
+  if (diffDays === 1) return 'yesterday';
+  return `${diffDays} days ago`;
+}
 
 const STATUS_BADGE = {
   in_stock: 'success',
@@ -332,7 +363,7 @@ function TransferHistorySection({ transfers }) {
   );
 }
 
-function LoanDetailsSection({ loans }) {
+function LoanDetailsSection({ loans, canRemind, onRemind }) {
   if (!loans || loans.length === 0) {
     return (
       <Card>
@@ -359,7 +390,8 @@ function LoanDetailsSection({ loans }) {
       </CardHeader>
       <CardContent className="space-y-4">
         {loans.map((loan) => {
-          const isOverdue = loan.status === 'active' && new Date(loan.due_date) < new Date();
+          const overdueDays = loanOverdueDays(loan);
+          const isOverdue = isLoanPastDue(loan);
           return (
             <div key={loan.id} className={cn(
               'border rounded-lg p-4',
@@ -386,11 +418,11 @@ function LoanDetailsSection({ loans }) {
                   <p className="text-muted-foreground text-xs">Due Date</p>
                   <p className="font-medium">{formatDate(loan.due_date)}</p>
                 </div>
-                {loan.total_penalty_accrued > 0 && (
+                {(loan.total_penalty_accrued > 0 || isOverdue) && (
                   <div>
-                    <p className="text-muted-foreground text-xs">Penalty</p>
+                    <p className="text-muted-foreground text-xs">Net penalty</p>
                     <p className="font-medium text-red-600">
-                      {formatCurrency(loan.total_penalty_accrued)}
+                      {formatCurrency(Math.max(0, (loan.total_penalty_accrued || 0) - (loan.penalty_waived || 0)))}
                     </p>
                   </div>
                 )}
@@ -401,6 +433,33 @@ function LoanDetailsSection({ loans }) {
                   </div>
                 )}
               </div>
+              {isOverdue && (
+                <div className="mt-3 rounded-md border border-red-200 bg-red-50/80 p-3 space-y-2">
+                  <p className="text-sm font-medium text-red-800">
+                    Loan overdue by {overdueDays} day{overdueDays === 1 ? '' : 's'} — {formatCurrency(Math.max(0, (loan.total_penalty_accrued || 0) - (loan.penalty_waived || 0)))} net penalty
+                  </p>
+                  {loan.last_reminder_sent && (
+                    <p className="text-xs text-muted-foreground">
+                      Last reminder sent {lastReminderLabel(loan.last_reminder_sent)}
+                    </p>
+                  )}
+                  {canRemind && loan.customer_phone && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => onRemind(loan)}
+                    >
+                      Send reminder
+                    </Button>
+                  )}
+                  {canRemind && !loan.customer_phone && (
+                    <p className="text-xs text-amber-800">
+                      Add a customer phone number on the loan/invoice to send WhatsApp reminders.
+                    </p>
+                  )}
+                </div>
+              )}
               <Link
                 to="/loans"
                 className="text-xs text-primary hover:underline mt-3 inline-block"
@@ -441,7 +500,11 @@ export default function VehicleDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const qc = useQueryClient();
+  const { canWrite, isCA } = usePermissions();
+  const canRemind = canWrite && !isCA;
   const [editOpen, setEditOpen] = useState(false);
+  const [waLoan, setWaLoan] = useState(null);
   const { data, isLoading, isError } = useVehicleDetail(id);
 
   const canSeePricing = ['super_admin', 'company_admin', 'branch_manager'].includes(user?.role);
@@ -492,13 +555,29 @@ export default function VehicleDetailPage() {
         <RtoInsuranceSection vehicle={vehicle} onEdit={() => setEditOpen(true)} />
         {canSeePricing && <PricingSection vehicle={vehicle} />}
         <TransferHistorySection transfers={transfers} />
-        <LoanDetailsSection loans={loans} />
+        <LoanDetailsSection
+          loans={loans}
+          canRemind={canRemind}
+          onRemind={(loan) => setWaLoan({ id: loan.id, name: loan.customer_name })}
+        />
         <DocumentsSection />
 
         <EditVehicleSheet
           open={editOpen}
           onOpenChange={setEditOpen}
           vehicle={vehicle}
+        />
+
+        <WhatsAppSendDialog
+          key={waLoan ? `wa-loan-${waLoan.id}` : 'wa-loan-closed'}
+          open={!!waLoan}
+          onOpenChange={(o) => { if (!o) setWaLoan(null); }}
+          kind="loan"
+          entityId={waLoan?.id}
+          customerName={waLoan?.name}
+          onAppSendSuccess={() => {
+            qc.invalidateQueries({ queryKey: ['vehicle', id] });
+          }}
         />
       </div>
     </AppLayout>

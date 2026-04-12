@@ -1,6 +1,7 @@
 const { query } = require('../config/db');
 const { seedDefaultInvoiceTemplates } = require('./invoiceTemplateController');
 const { seedDefaultLeaveTypes } = require('../services/leaveTypesService');
+const { seedWhatsappTemplates } = require('../services/whatsappTemplatesSeed');
 
 async function getCompany(req, res) {
   try {
@@ -155,6 +156,7 @@ async function createCompany(req, res) {
     const newId = rows[0].id;
     await seedDefaultInvoiceTemplates(newId);
     await seedDefaultLeaveTypes(newId);
+    await seedWhatsappTemplates(newId);
 
     res.status(201).json({ company: rows[0] });
   } catch (err) {

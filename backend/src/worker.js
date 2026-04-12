@@ -9,6 +9,7 @@ const redis = require('./config/redis');
 const { schedulePenaltyJob, createPenaltyWorker } = require('./jobs/penaltyJob');
 const { scheduleReminderJobs, createReminderWorker } = require('./jobs/reminderJob');
 const { scheduleQuotationExpiryJob, createQuotationExpiryWorker } = require('./jobs/quotationExpiryJob');
+const { scheduleLoanReminderJob, createLoanReminderWorker } = require('./jobs/loanReminderJob');
 
 const workers = [];
 
@@ -21,11 +22,13 @@ async function start() {
   workers.push(createPenaltyWorker());
   workers.push(createReminderWorker());
   workers.push(createQuotationExpiryWorker());
+  workers.push(createLoanReminderWorker());
 
   // Schedule repeatable jobs (idempotent — removes old schedules first)
   await schedulePenaltyJob();
   await scheduleReminderJobs();
   await scheduleQuotationExpiryJob();
+  await scheduleLoanReminderJob();
 
   console.log(`[Worker] ${workers.length} workers active, waiting for jobs...`);
 }

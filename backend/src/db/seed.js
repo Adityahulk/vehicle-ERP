@@ -52,6 +52,8 @@ async function seed() {
       await client.query(`DELETE FROM invoice_templates WHERE company_id = $1`, [cid]);
       await client.query(`DELETE FROM einvoice_tokens WHERE company_id = $1`, [cid]);
       await client.query(`UPDATE branches SET manager_id = NULL WHERE company_id = $1`, [cid]);
+      await client.query(`DELETE FROM salary_revisions WHERE company_id = $1`, [cid]);
+      await client.query(`DELETE FROM employee_profiles WHERE company_id = $1`, [cid]);
       await client.query(`DELETE FROM users WHERE company_id = $1`, [cid]);
       await client.query(`DELETE FROM branches WHERE company_id = $1`, [cid]);
       await client.query(`DELETE FROM companies WHERE id = $1`, [cid]);
@@ -142,6 +144,33 @@ async function seed() {
     // Assign managers to branches
     await client.query(`UPDATE branches SET manager_id = $1 WHERE id = $2`, [manager1.id, mapusa.id]);
     await client.query(`UPDATE branches SET manager_id = $1 WHERE id = $2`, [manager2.id, panaji.id]);
+
+    const { rows: epInserted } = await client.query(
+      `INSERT INTO employee_profiles (
+         company_id, user_id, employee_code, designation, department, joining_date,
+         employment_type, probation_end_date, annual_salary, salary_type
+       ) VALUES
+         ($1, $2, 'EMP-MAP-001', 'Branch Operations Manager', 'Sales',
+          (CURRENT_DATE - INTERVAL '3 years')::date, 'full_time',
+          ((CURRENT_DATE - INTERVAL '3 years')::date + INTERVAL '90 days')::date,
+          72000000, 'monthly'),
+         ($1, $3, 'EMP-MAP-002', 'Branch Manager', 'Management',
+          (CURRENT_DATE - INTERVAL '2 years')::date, 'full_time',
+          ((CURRENT_DATE - INTERVAL '2 years')::date + INTERVAL '90 days')::date,
+          54000000, 'monthly'),
+         ($1, $4, 'EMP-MAP-003', 'Sales Executive', 'Sales',
+          (CURRENT_DATE - INTERVAL '1 year')::date, 'full_time',
+          ((CURRENT_DATE - INTERVAL '1 year')::date + INTERVAL '90 days')::date,
+          24000000, 'monthly')
+       RETURNING id, employee_code`,
+      [companyId, adminUser.id, manager1.id, staff1.id],
+    );
+    const mgrProfile = epInserted.find((r) => r.employee_code === 'EMP-MAP-002');
+    await client.query(
+      `INSERT INTO salary_revisions (company_id, employee_id, effective_date, old_salary, new_salary, reason, revised_by)
+       VALUES ($1, $2, (CURRENT_DATE - INTERVAL '6 months')::date, $3, $4, $5, $6)`,
+      [companyId, mgrProfile.id, 49090909, 54000000, 'Annual increment (10%)', adminUser.id],
+    );
 
     await seedDefaultLeaveTypes(companyId, client);
 

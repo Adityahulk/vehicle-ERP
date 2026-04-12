@@ -150,7 +150,8 @@ async function getVehicle(req, res) {
     const loans = await query(
       `SELECT l.id, l.bank_name, l.loan_amount, l.emi_amount, l.due_date,
               l.status, l.total_penalty_accrued, l.interest_rate, l.tenure_months,
-              c.name AS customer_name
+              l.penalty_per_day, l.last_reminder_sent, l.invoice_id,
+              c.name AS customer_name, c.phone AS customer_phone
        FROM loans l
        JOIN invoices i ON i.id = l.invoice_id
        LEFT JOIN customers c ON c.id = l.customer_id

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import AppLayout from '@/components/AppLayout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -24,8 +25,10 @@ import {
 } from '@/components/ui/dialog';
 import api from '@/lib/api';
 import useAuthStore from '@/store/authStore';
-import { Building2, GitBranch, Users, Receipt, FileText, Loader2, Upload, Eye, EyeOff, RotateCcw, Plus, Pencil } from 'lucide-react';
+import { Building2, GitBranch, Users, Receipt, FileText, Loader2, Upload, Eye, EyeOff, RotateCcw, Plus, Pencil, UserCircle } from 'lucide-react';
 import InvoiceTemplates from '@/pages/InvoiceTemplates';
+import { toInputDate } from '@/lib/utils';
+import { toast } from 'sonner';
 
 const INDIAN_STATES = [
   { code: '01', name: 'Jammu & Kashmir' }, { code: '02', name: 'Himachal Pradesh' },
@@ -380,10 +383,34 @@ function BranchesTab() {
 }
 
 // ──────────────────────────── Users Tab ────────────────────────────
+function emptyUserForm() {
+  return {
+    name: '',
+    email: '',
+    password: '',
+    phone: '',
+    role: 'staff',
+    branch_id: '',
+    designation: '',
+    department: 'Sales',
+    joining_date: toInputDate(new Date().toISOString()),
+    employment_type: 'full_time',
+    annual_salary: '',
+    bank_name: '',
+    bank_account_number: '',
+    bank_ifsc: '',
+    pan_number: '',
+    aadhar_display: '',
+    emergency_contact_name: '',
+    emergency_contact_phone: '',
+    address: '',
+  };
+}
+
 function UsersTab() {
   const qc = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
-  const [addForm, setAddForm] = useState({ name: '', email: '', password: '', phone: '', role: 'staff', branch_id: '' });
+  const [addForm, setAddForm] = useState(emptyUserForm);
   const [resetResult, setResetResult] = useState(null);
 
   const { data: usersData, isLoading } = useQuery({
@@ -391,17 +418,40 @@ function UsersTab() {
     queryFn: () => api.get('/users?limit=200').then((r) => r.data.users),
   });
 
+  const { data: employeesList } = useQuery({
+    queryKey: ['employees-list'],
+    queryFn: () => api.get('/employees').then((r) => r.data.employees),
+  });
+
+  const empByUserId = useMemo(
+    () => Object.fromEntries((employeesList || []).map((e) => [e.user_id, e])),
+    [employeesList],
+  );
+
   const { data: branches } = useQuery({
     queryKey: ['branches'],
     queryFn: () => api.get('/branches').then((r) => r.data.branches),
   });
 
   const createMut = useMutation({
-    mutationFn: (body) => api.post('/users', body),
+    mutationFn: async ({ userPayload, employment }) => {
+      const res = await api.post('/users', userPayload);
+      const uid = res.data.user.id;
+      if (employment) {
+        try {
+          await api.post('/employees', { ...employment, user_id: uid });
+        } catch (err) {
+          const msg = err.response?.data?.error || err.message;
+          throw new Error(msg || 'Employment profile failed (user may have been created).');
+        }
+      }
+      return res;
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['users-settings'] });
+      qc.invalidateQueries({ queryKey: ['employees-list'] });
       setShowAdd(false);
-      setAddForm({ name: '', email: '', password: '', phone: '', role: 'staff', branch_id: '' });
+      setAddForm(emptyUserForm());
     },
   });
 
@@ -455,6 +505,13 @@ function UsersTab() {
                       </td>
                       <td className="py-2 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {empByUserId[u.id] && (
+                            <Button variant="outline" size="sm" className="h-8 px-2 text-xs gap-1" asChild>
+                              <Link to={`/employees/${u.id}`}>
+                                <UserCircle className="h-3.5 w-3.5" /> Profile
+                              </Link>
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -518,11 +575,51 @@ function UsersTab() {
             <DialogTitle>Add New User</DialogTitle>
           </DialogHeader>
           <form
-            className="space-y-4"
+            className="space-y-4 max-h-[85vh] overflow-y-auto pr-1"
             onSubmit={(e) => {
               e.preventDefault();
-              const body = { ...addForm, branch_id: addForm.branch_id || undefined };
-              createMut.mutate(body);
+              if (addForm.role !== 'ca') {
+                if (!addForm.designation?.trim()) {
+                  toast.error('Designation is required');
+                  return;
+                }
+                if (!addForm.joining_date) {
+                  toast.error('Joining date is required');
+                  return;
+                }
+                const sal = Number(addForm.annual_salary);
+                if (!Number.isFinite(sal) || sal < 0) {
+                  toast.error('Enter a valid annual salary (₹)');
+                  return;
+                }
+              }
+              const userPayload = {
+                name: addForm.name,
+                email: addForm.email,
+                password: addForm.password,
+                phone: addForm.phone || undefined,
+                role: addForm.role,
+                branch_id: addForm.branch_id || undefined,
+              };
+              const employment =
+                addForm.role === 'ca'
+                  ? null
+                  : {
+                      designation: addForm.designation.trim(),
+                      department: addForm.department || undefined,
+                      joining_date: addForm.joining_date,
+                      employment_type: addForm.employment_type,
+                      annual_salary: Number(addForm.annual_salary),
+                      bank_name: addForm.bank_name || undefined,
+                      bank_account_number: addForm.bank_account_number || undefined,
+                      bank_ifsc: addForm.bank_ifsc || undefined,
+                      pan_number: addForm.pan_number || undefined,
+                      aadhar_number: addForm.aadhar_display || undefined,
+                      emergency_contact_name: addForm.emergency_contact_name || undefined,
+                      emergency_contact_phone: addForm.emergency_contact_phone || undefined,
+                      address: addForm.address || undefined,
+                    };
+              createMut.mutate({ userPayload, employment });
             }}
           >
             <div className="space-y-1.5">
@@ -571,7 +668,144 @@ function UsersTab() {
                 </Select>
               </div>
             </div>
-            {createMut.isError && <p className="text-sm text-destructive">{createMut.error?.response?.data?.error || 'Failed to create user'}</p>}
+
+            {addForm.role !== 'ca' && (
+              <>
+                <div className="border-t border-border pt-4 space-y-3">
+                  <p className="text-sm font-medium">Employment details</p>
+                  <div className="space-y-1.5">
+                    <Label>Designation *</Label>
+                    <Input
+                      value={addForm.designation}
+                      onChange={(e) => setAddForm((p) => ({ ...p, designation: e.target.value }))}
+                      placeholder="e.g. Sales Executive"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label>Department</Label>
+                      <Select value={addForm.department} onValueChange={(v) => setAddForm((p) => ({ ...p, department: v }))}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Sales">Sales</SelectItem>
+                          <SelectItem value="Operations">Operations</SelectItem>
+                          <SelectItem value="Finance">Finance</SelectItem>
+                          <SelectItem value="Management">Management</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Employment type</Label>
+                      <Select value={addForm.employment_type} onValueChange={(v) => setAddForm((p) => ({ ...p, employment_type: v }))}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="full_time">Full Time</SelectItem>
+                          <SelectItem value="part_time">Part Time</SelectItem>
+                          <SelectItem value="contract">Contract</SelectItem>
+                          <SelectItem value="probation">Probation</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label>Joining date *</Label>
+                      <Input
+                        type="date"
+                        value={addForm.joining_date}
+                        onChange={(e) => setAddForm((p) => ({ ...p, joining_date: e.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Annual salary (₹) *</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={addForm.annual_salary}
+                        onChange={(e) => setAddForm((p) => ({ ...p, annual_salary: e.target.value }))}
+                        required
+                      />
+                      {addForm.annual_salary !== '' && Number(addForm.annual_salary) >= 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          ≈ {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(addForm.annual_salary) / 12)} per month
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <details className="rounded-lg border border-border p-3 text-sm">
+                  <summary className="cursor-pointer font-medium select-none">Bank &amp; identity details (optional)</summary>
+                  <div className="mt-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Bank name</Label>
+                        <Input value={addForm.bank_name} onChange={(e) => setAddForm((p) => ({ ...p, bank_name: e.target.value }))} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Account number</Label>
+                        <Input value={addForm.bank_account_number} onChange={(e) => setAddForm((p) => ({ ...p, bank_account_number: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>IFSC</Label>
+                      <Input value={addForm.bank_ifsc} onChange={(e) => setAddForm((p) => ({ ...p, bank_ifsc: e.target.value }))} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>PAN</Label>
+                        <Input value={addForm.pan_number} onChange={(e) => setAddForm((p) => ({ ...p, pan_number: e.target.value }))} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Aadhar</Label>
+                        <Input
+                          value={addForm.aadhar_display}
+                          onChange={(e) => setAddForm((p) => ({ ...p, aadhar_display: e.target.value }))}
+                          onBlur={() => {
+                            const d = addForm.aadhar_display.replace(/\D/g, '');
+                            const last4 = d.slice(-4);
+                            if (last4.length === 4) {
+                              setAddForm((p) => ({ ...p, aadhar_display: `XXXX-XXXX-${last4}` }));
+                            }
+                          }}
+                          placeholder="Last 4 stored visibly"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Emergency contact name</Label>
+                        <Input
+                          value={addForm.emergency_contact_name}
+                          onChange={(e) => setAddForm((p) => ({ ...p, emergency_contact_name: e.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Emergency phone</Label>
+                        <Input
+                          value={addForm.emergency_contact_phone}
+                          onChange={(e) => setAddForm((p) => ({ ...p, emergency_contact_phone: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </details>
+              </>
+            )}
+
+            {createMut.isError && (
+              <p className="text-sm text-destructive">
+                {createMut.error?.response?.data?.error || createMut.error?.message || 'Failed to create user'}
+              </p>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button>
               <Button type="submit" disabled={createMut.isPending}>

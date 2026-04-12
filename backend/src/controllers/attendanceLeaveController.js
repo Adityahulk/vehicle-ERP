@@ -532,4 +532,5 @@ module.exports = {
   leaveListAll,
   workingDatesInRange,
   eachDateInclusive,
+  sumApprovedDaysForTypeYear,
 };

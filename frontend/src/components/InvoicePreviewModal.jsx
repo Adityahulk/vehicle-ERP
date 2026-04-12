@@ -1,12 +1,30 @@
 import { useState, useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
-import { Loader2, Download } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, Download, ChevronDown, ChevronRight } from 'lucide-react';
 import { apiPath } from '@/lib/apiPrefix';
 import api from '@/lib/api';
+
+const WA_TYPE_LABEL = {
+  loan_overdue: 'Loan overdue',
+  invoice_share: 'Invoice share',
+  quotation_share: 'Quotation share',
+  loan_penalty_alert: 'Penalty alert',
+  service_reminder: 'Service reminder',
+  insurance_expiry: 'Insurance expiry',
+  custom: 'Custom',
+};
+
+function waStatusBadge(status) {
+  if (status === 'failed') return { variant: 'destructive', label: 'Failed' };
+  if (status === 'pending') return { variant: 'warning', label: 'Pending' };
+  return { variant: 'success', label: 'Sent' };
+}
 
 export default function InvoicePreviewModal({
   open,
@@ -19,11 +37,19 @@ export default function InvoicePreviewModal({
   const [templateId, setTemplateId] = useState('');
   const [iframeUrl, setIframeUrl] = useState('');
   const [loading, setLoading] = useState(false);
+  const [waOpen, setWaOpen] = useState(false);
   const previewBlobRef = useRef(null);
+
+  const { data: waLogs = [], isLoading: waLoading } = useQuery({
+    queryKey: ['whatsapp-logs-invoice', invoiceId],
+    queryFn: () => api.get(`/whatsapp/logs/invoice/${invoiceId}`).then((r) => r.data.logs),
+    enabled: open && !!invoiceId,
+  });
 
   useEffect(() => {
     if (!open) {
       setIframeUrl('');
+      setWaOpen(false);
       return;
     }
     const def = templates.find((t) => t.is_default)?.id || templates[0]?.id || '';
@@ -114,6 +140,48 @@ export default function InvoicePreviewModal({
             </div>
           </div>
         </DialogHeader>
+        <div className="px-6 py-2 border-b border-border shrink-0 bg-muted/20">
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 text-left text-sm font-medium text-foreground hover:opacity-90"
+            onClick={() => setWaOpen((v) => !v)}
+          >
+            {waOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+            WhatsApp History
+            {!waLoading && waLogs.length > 0 && (
+              <span className="text-muted-foreground font-normal">({waLogs.length})</span>
+            )}
+          </button>
+          {waOpen && (
+            <div className="mt-2 max-h-36 space-y-2 overflow-y-auto pb-1">
+              {waLoading ? (
+                <div className="flex justify-center py-2">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : waLogs.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-1">No WhatsApp messages logged for this invoice yet.</p>
+              ) : (
+                waLogs.map((log) => {
+                  const st = waStatusBadge(log.status);
+                  return (
+                    <div
+                      key={log.id}
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+                    >
+                      <span className="text-muted-foreground whitespace-nowrap">
+                        {new Date(log.created_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                      </span>
+                      <span className="font-medium">
+                        {WA_TYPE_LABEL[log.message_type] || log.message_type}
+                      </span>
+                      <Badge variant={st.variant}>{st.label}</Badge>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+        </div>
         <div className="flex-1 relative min-h-[400px] bg-muted/30">
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
