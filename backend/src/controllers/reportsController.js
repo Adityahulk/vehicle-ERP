@@ -112,56 +112,155 @@ async function gstr1Export(req, res) {
       ? `${y + 1}-01-01`
       : `${y}-${String(m + 1).padStart(2, '0')}-01`;
 
-    const { rows: invoices } = await query(
-      `SELECT i.invoice_number, i.invoice_date, i.subtotal, i.discount,
-              i.cgst_amount, i.sgst_amount, i.igst_amount, i.total,
+    const { rows: items } = await query(
+      `SELECT i.invoice_number, i.invoice_date, i.total, i.discount,
               c.name AS customer_name, c.gstin AS customer_gstin,
-              v.chassis_number
-       FROM invoices i
+              ii.hsn_code, ii.description, ii.quantity, ii.unit_price, 
+              (ii.unit_price * ii.quantity) AS item_total,
+              ii.cgst_rate, ii.sgst_rate, ii.igst_rate,
+              ii.cgst_amount, ii.sgst_amount, ii.igst_amount
+       FROM invoice_items ii
+       JOIN invoices i ON i.id = ii.invoice_id AND i.is_deleted = FALSE AND ii.is_deleted = FALSE
        LEFT JOIN customers c ON c.id = i.customer_id
-       LEFT JOIN vehicles v ON v.id = i.vehicle_id
-       WHERE i.company_id = $1 AND i.status = 'confirmed' AND i.is_deleted = FALSE
+       WHERE i.company_id = $1 AND i.status = 'confirmed'
          AND i.invoice_date >= $2 AND i.invoice_date < $3
-       ORDER BY i.invoice_date`,
+       ORDER BY i.invoice_date, i.invoice_number`,
       [company_id, startDate, endDate],
     );
 
-    const header = [
-      'Invoice Number', 'Invoice Date', 'Customer Name', 'Customer GSTIN', 'Type',
-      'Taxable Value', 'CGST', 'SGST', 'IGST', 'Total', 'Chassis Number',
-    ].join(',');
+    const b2b = [];
+    const b2cl = [];
+    const b2csMap = {};
+    const hsnMap = {};
+    const invoiceGroups = {};
 
-    const rows = invoices.map((inv) => {
-      const total = Number(inv.total);
-      const hasGstin = inv.customer_gstin && inv.customer_gstin.length >= 15;
-      let type = 'B2C Small';
-      if (hasGstin) type = 'B2B';
-      else if (total > 250000_00) type = 'B2C Large';
+    for (const item of items) {
+      const invKey = item.invoice_number;
+      if (!invoiceGroups[invKey]) {
+        const isInterstate = Number(item.igst_amount) > 0;
+        const hasGstin = item.customer_gstin && item.customer_gstin.length >= 15;
+        const isLarge = Number(item.total) > 25000000;
+        let category = 'B2CS';
+        if (hasGstin) category = 'B2B';
+        else if (isInterstate && isLarge) category = 'B2CL';
 
-      const taxable = Number(inv.subtotal) - Number(inv.discount);
-      return [
-        inv.invoice_number,
-        new Date(inv.invoice_date).toISOString().split('T')[0],
-        `"${(inv.customer_name || '').replace(/"/g, '""')}"`,
-        inv.customer_gstin || '',
-        type,
-        (taxable / 100).toFixed(2),
-        (Number(inv.cgst_amount) / 100).toFixed(2),
-        (Number(inv.sgst_amount) / 100).toFixed(2),
-        (Number(inv.igst_amount) / 100).toFixed(2),
-        (total / 100).toFixed(2),
-        inv.chassis_number || '',
-      ].join(',');
-    });
+        const pos = hasGstin ? item.customer_gstin.substring(0, 2) + '-State' : (isInterstate ? '97-Other Territory' : '00-Local');
 
-    const csv = [header, ...rows].join('\n');
+        invoiceGroups[invKey] = {
+          invoice_number: item.invoice_number,
+          invoice_date: item.invoice_date,
+          customer_name: item.customer_name,
+          customer_gstin: item.customer_gstin,
+          total: item.total,
+          category,
+          pos,
+          rates: {}
+        };
+      }
 
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="GSTR1_${y}_${String(m).padStart(2, '0')}.csv"`);
-    res.send(csv);
+      const inv = invoiceGroups[invKey];
+      const rate = Number(item.cgst_rate || 0) + Number(item.sgst_rate || 0) + Number(item.igst_rate || 0);
+      
+      if (!inv.rates[rate]) inv.rates[rate] = { taxable: 0, cess: 0 };
+      
+      // We must distribute invoice-level discount proportionally or just apply loosely. We will assume item_total acts purely on item cost.
+      inv.rates[rate].taxable += (Number(item.item_total) / 100);
+
+      // HSN grouping
+      const hsn = item.hsn_code || '8703';
+      if (!hsnMap[hsn]) {
+        hsnMap[hsn] = { desc: item.description || 'Goods', uqc: 'NOS', qty: 0, total_val: 0, taxable: 0, igst: 0, cgst: 0, sgst: 0 };
+      }
+      hsnMap[hsn].qty += Number(item.quantity || 1);
+      hsnMap[hsn].taxable += (Number(item.item_total) / 100);
+      hsnMap[hsn].igst += (Number(item.igst_amount) / 100);
+      hsnMap[hsn].cgst += (Number(item.cgst_amount) / 100);
+      hsnMap[hsn].sgst += (Number(item.sgst_amount) / 100);
+      hsnMap[hsn].total_val += (Number(item.item_total) + Number(item.igst_amount) + Number(item.cgst_amount) + Number(item.sgst_amount)) / 100;
+    }
+
+    for (const invKey of Object.keys(invoiceGroups)) {
+      const inv = invoiceGroups[invKey];
+      const dateObj = new Date(inv.invoice_date);
+      const formattedDate = dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-');
+
+      for (const rateStr of Object.keys(inv.rates)) {
+        const rData = inv.rates[rateStr];
+        
+        if (inv.category === 'B2B') {
+          b2b.push({
+            'GSTIN/UIN of Recipient': inv.customer_gstin,
+            'Receiver Name': inv.customer_name,
+            'Invoice Number': inv.invoice_number,
+            'Invoice date': formattedDate,
+            'Invoice Value': (Number(inv.total) / 100).toFixed(2),
+            'Place Of Supply': inv.pos,
+            'Reverse Charge': 'N',
+            'Applicable % of Tax Rate': '',
+            'Invoice Type': 'Regular B2B',
+            'E-Commerce GSTIN': '',
+            'Rate': rateStr,
+            'Taxable Value': rData.taxable.toFixed(2),
+            'Cess Amount': '0.00'
+          });
+        } else if (inv.category === 'B2CL') {
+          b2cl.push({
+            'Invoice Number': inv.invoice_number,
+            'Invoice date': formattedDate,
+            'Invoice Value': (Number(inv.total) / 100).toFixed(2),
+            'Place Of Supply': inv.pos,
+            'Applicable % of Tax Rate': '',
+            'Rate': rateStr,
+            'Taxable Value': rData.taxable.toFixed(2),
+            'Cess Amount': '0.00',
+            'E-Commerce GSTIN': ''
+          });
+        } else {
+          const key = `OE|${inv.pos}|${rateStr}`;
+          if (!b2csMap[key]) {
+            b2csMap[key] = { type: 'OE', pos: inv.pos, rate: rateStr, taxable: 0 };
+          }
+          b2csMap[key].taxable += rData.taxable;
+        }
+      }
+    }
+
+    const b2cs = Object.values(b2csMap).map(b => ({
+      'Type': b.type,
+      'Place Of Supply': b.pos,
+      'Applicable % of Tax Rate': '',
+      'Rate': b.rate,
+      'Taxable Value': b.taxable.toFixed(2),
+      'Cess Amount': '0.00',
+      'E-Commerce GSTIN': ''
+    }));
+
+    const hsnSheet = Object.keys(hsnMap).map(hsn => ({
+      'HSN': hsn,
+      'Description': hsnMap[hsn].desc,
+      'UQC': hsnMap[hsn].uqc,
+      'Total Quantity': hsnMap[hsn].qty,
+      'Total Value': hsnMap[hsn].total_val.toFixed(2),
+      'Taxable Value': hsnMap[hsn].taxable.toFixed(2),
+      'Integrated Tax Amount': hsnMap[hsn].igst.toFixed(2),
+      'Central Tax Amount': hsnMap[hsn].cgst.toFixed(2),
+      'State/UT Tax Amount': hsnMap[hsn].sgst.toFixed(2),
+      'Cess Amount': '0.00'
+    }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(b2b.length ? b2b : [{'GSTIN/UIN of Recipient': ''}]), 'b2b');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(b2cl.length ? b2cl : [{'Invoice Number': ''}]), 'b2cl');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(b2cs.length ? b2cs : [{'Type': ''}]), 'b2cs');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hsnSheet.length ? hsnSheet : [{'HSN': ''}]), 'hsn');
+
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="GSTR1_Offline_Utility_${y}_${String(m).padStart(2, '0')}.xlsx"`);
+    res.send(Buffer.from(buf));
   } catch (err) {
     console.error('gstr1Export error:', err.message);
-    res.status(500).json({ error: 'Failed to export GSTR-1' });
+    res.status(500).json({ error: 'Failed to export GSTR-1 Excel' });
   }
 }
 
