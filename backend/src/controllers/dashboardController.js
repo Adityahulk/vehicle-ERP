@@ -28,15 +28,12 @@ async function adminDashboard(req, res) {
 
     const stockResult = await query(
       `SELECT b.id AS branch_id, b.name AS branch_name,
-              COUNT(*) FILTER (WHERE v.status = 'in_stock')::int AS in_stock,
-              COUNT(*) FILTER (
-                WHERE v.status = 'sold'
-                AND EXISTS (
-                  SELECT 1 FROM invoices inv
-                  WHERE inv.vehicle_id = v.id AND inv.status = 'confirmed'
-                    AND inv.invoice_date >= $2 AND inv.invoice_date <= $3
-                )
-              )::int AS sold_this_month
+              COUNT(v.id) FILTER (WHERE v.status = 'in_stock')::int AS in_stock,
+              (
+                SELECT COUNT(*)::int FROM invoices inv
+                WHERE inv.branch_id = b.id AND inv.company_id = $1 AND inv.is_deleted = FALSE AND inv.status = 'confirmed'
+                  AND inv.invoice_date >= $2 AND inv.invoice_date <= $3
+              ) AS sold_this_month
        FROM branches b
        LEFT JOIN vehicles v ON v.branch_id = b.id AND v.company_id = $1 AND v.is_deleted = FALSE
        WHERE b.company_id = $1 AND b.is_deleted = FALSE
@@ -105,6 +102,11 @@ async function branchDashboard(req, res) {
   try {
     const company_id = req.user.company_id;
     const { branchId } = req.params;
+    const { role, branch_id: userBranch } = req.user;
+
+    if ((role === 'staff' || role === 'branch_manager') && String(userBranch) !== String(branchId)) {
+      return res.status(403).json({ error: 'Access denied: You can only view your officially assigned branch dashboard.' });
+    }
 
     const branchCheck = await query(
       `SELECT id, name FROM branches WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
