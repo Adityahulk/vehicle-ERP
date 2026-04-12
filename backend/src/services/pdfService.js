@@ -186,7 +186,14 @@ async function htmlToPdfBuffer(html) {
   const executablePath = findChromePath();
   const launchOptions = {
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+    args: [
+      '--no-sandbox', 
+      '--disable-setuid-sandbox', 
+      '--disable-gpu', 
+      '--disable-dev-shm-usage',
+      '--single-process',
+      '--no-zygote'
+    ],
     ...(executablePath && { executablePath }),
   };
   const browser = await puppeteer.launch(launchOptions);
@@ -334,7 +341,14 @@ async function generatePurchaseOrderPdf(poData) {
   const executablePath = findChromePath();
   const launchOptions = {
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+    args: [
+      '--no-sandbox', 
+      '--disable-setuid-sandbox', 
+      '--disable-gpu', 
+      '--disable-dev-shm-usage',
+      '--single-process',
+      '--no-zygote'
+    ],
     ...(executablePath && { executablePath }),
   };
   const browser = await puppeteer.launch(launchOptions);

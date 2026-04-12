@@ -12,6 +12,7 @@ services:
     image: postgres:15-alpine
     container_name: vehicle_erp_db
     restart: unless-stopped
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=50", "-c", "work_mem=4MB"]
     environment:
       POSTGRES_USER: ${DB_USER:-erp_user}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
@@ -28,19 +29,6 @@ services:
       timeout: 3s
       retries: 10
 
-  # Browser UI for Postgres (Adminer). Default: only reachable on the host (127.0.0.1), not the public internet.
-  # From your laptop: ssh -L 8080:127.0.0.1:8080 user@server  then open http://127.0.0.1:8080
-  # Login: System = PostgreSQL, Server = postgres (or 172.29.44.10), User/Password/DB = same as DB_* in .env
-  adminer:
-    image: adminer:latest
-    container_name: vehicle_erp_adminer
-    restart: unless-stopped
-    networks: [erp]
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - "${ADMINER_BIND:-127.0.0.1}:${ADMINER_PORT:-8080}:8080"
 
   redis:
     image: redis:7-alpine
@@ -98,28 +86,6 @@ services:
       retries: 5
       start_period: 90s
 
-  worker:
-    build: ./backend
-    container_name: vehicle_erp_worker
-    restart: unless-stopped
-    networks: [erp]
-    entrypoint: ["node"]
-    command: ["src/worker.js"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      NODE_ENV: production
-      DATABASE_URL: postgresql://${DB_USER:-erp_user}:${DB_PASSWORD}@172.29.44.10:5432/${DB_NAME:-vehicle_erp}
-      REDIS_URL: redis://172.29.44.21:6379
-      PGHOST: 172.29.44.10
-      JWT_SECRET: ${JWT_SECRET}
-      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
-      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
-      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
-      TWO_FACTOR_API_KEY: ${TWO_FACTOR_API_KEY:-}
 
   frontend:
     build: ./frontend

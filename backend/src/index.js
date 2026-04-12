@@ -97,6 +97,7 @@ const PORT = Number(process.env.PORT) || 4000;
 const HOST = process.env.LISTEN_HOST || '0.0.0.0';
 app.listen(PORT, HOST, () => {
   console.log(`Vehicle ERP API listening on http://${HOST}:${PORT}`);
+  require('./worker.js');
 });
 
 module.exports = app;
