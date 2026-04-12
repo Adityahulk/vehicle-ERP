@@ -13,7 +13,7 @@ const {
   buildDummyInvoiceData,
   buildStandardInvoiceHtml,
 } = require('../services/invoiceTemplateRender');
-const eInvoice = require('../services/eInvoiceService');
+const taxpro = require('../services/taxproService');
 const { query } = require('../config/db');
 const { logAudit } = require('../middleware/auditLog');
 
@@ -66,11 +66,11 @@ router.get('/preview-template', requireMinRole('company_admin'), async (req, res
   }
 });
 
-// E-Invoice status check must be before /:id routes to avoid param collision
-router.get('/einvoice/status', (_req, res) => {
+// TaxPro status check must be before /:id routes to avoid param collision
+router.get('/taxpro/status', (_req, res) => {
   res.json({
-    enabled: eInvoice.isEInvoiceEnabled(),
-    environment: process.env.EINVOICE_ENV || 'sandbox',
+    enabled: taxpro.isTaxproEnabled(),
+    environment: process.env.TAXPRO_ENV || 'sandbox',
   });
 });
 
@@ -122,15 +122,15 @@ router.get('/:id', ic.getInvoice);
 router.patch('/:id/cancel', requireNotRole('ca'), requireMinRole('branch_manager'), ic.cancelInvoice);
 router.patch('/:id/confirm', requireNotRole('ca'), ic.confirmInvoice);
 
-// ─── E-Invoice (NIC IRP) Routes ──────────────────────────────
+// ─── E-Invoice (TaxPro GSP) Routes ──────────────────────────────
 
 router.post('/:id/einvoice/generate', requireNotRole('ca'), requireMinRole('branch_manager'), async (req, res) => {
   try {
     const company_id = req.user.company_id;
     const invoiceId = req.params.id;
 
-    if (!eInvoice.isEInvoiceEnabled()) {
-      return res.status(400).json({ success: false, error: 'E-invoicing is not configured. Set EINVOICE_* environment variables.' });
+    if (!taxpro.isTaxproEnabled()) {
+      return res.status(400).json({ success: false, error: 'TaxPro is not configured. Set TAXPRO_* environment variables.' });
     }
 
     const { rows: inv } = await query(
@@ -142,7 +142,7 @@ router.post('/:id/einvoice/generate', requireNotRole('ca'), requireMinRole('bran
     if (inv[0].irn && inv[0].irn_status === 'generated') return res.status(400).json({ success: false, error: 'E-invoice already generated', irn: inv[0].irn });
 
     const invoiceData = await ic.fetchFullInvoice(invoiceId, company_id);
-    const result = await eInvoice.generateIRN(company_id, invoiceData);
+    const result = await taxpro.generateIRN(company_id, invoiceData);
 
     await query(
       `UPDATE invoices SET irn = $1, ack_number = $2, ack_date = $3, signed_qr = $4,
@@ -194,7 +194,7 @@ router.post('/:id/einvoice/cancel', requireNotRole('ca'), requireMinRole('branch
       return res.status(400).json({ success: false, error: 'E-invoice can only be cancelled within 24 hours of generation' });
     }
 
-    const result = await eInvoice.cancelIRN(company_id, inv[0].irn, reason, remark);
+    const result = await taxpro.cancelIRN(company_id, inv[0].irn, reason, remark);
 
     await query(
       `UPDATE invoices SET irn_status = 'cancelled', irn_cancel_date = $1, irn_cancel_reason = $2
@@ -223,6 +223,81 @@ router.get('/:id/einvoice', async (req, res) => {
 
     res.json({ success: true, data: rows[0] });
   } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── E-Way Bill (TaxPro GSP) Routes ──────────────────────────────
+
+router.post('/:id/ewaybill/generate', requireNotRole('ca'), requireMinRole('branch_manager'), async (req, res) => {
+  try {
+    const company_id = req.user.company_id;
+    const invoiceId = req.params.id;
+
+    if (!taxpro.isTaxproEnabled()) {
+      return res.status(400).json({ success: false, error: 'TaxPro is not configured. Set TAXPRO_* environment variables.' });
+    }
+
+    const transportArgs = req.body;
+    if (!transportArgs.distance_km || !transportArgs.transporter_id || !transportArgs.vehicle_no) {
+      return res.status(400).json({ success: false, error: 'distance_km, transporter_id, and vehicle_no are required' });
+    }
+
+    const { rows: inv } = await query(
+      `SELECT id, irn, irn_status, eway_bill_no FROM invoices WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
+      [invoiceId, company_id],
+    );
+
+    if (inv.length === 0) return res.status(404).json({ success: false, error: 'Invoice not found' });
+    if (!inv[0].irn || inv[0].irn_status !== 'generated') return res.status(400).json({ success: false, error: 'Generate IRN before E-way bill' });
+    if (inv[0].eway_bill_no) return res.status(400).json({ success: false, error: 'E-Way bill already generated', ewbNo: inv[0].eway_bill_no });
+
+    const result = await taxpro.generateEwayBill(company_id, inv[0].irn, transportArgs);
+
+    await query(
+      `UPDATE invoices SET eway_bill_no = $1, eway_bill_date = $2, eway_bill_valid_until = $3, eway_bill_status = 'generated',
+       transporter_id = $4, transporter_name = $5, vehicle_no = $6, transport_mode = $7, distance_km = $8
+       WHERE id = $9 AND company_id = $10`,
+      [result.ewbNo, result.ewbDt, result.validUpto, transportArgs.transporter_id, transportArgs.transporter_name, transportArgs.vehicle_no, transportArgs.transport_mode, transportArgs.distance_km, invoiceId, company_id],
+    );
+
+    logAudit({ companyId: company_id, userId: req.user.id, action: 'create', entity: 'eway_bill', entityId: invoiceId, newValue: { eway_bill_no: result.ewbNo }, req });
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('EWP generation failed:', err.message);
+    await query(`UPDATE invoices SET eway_bill_status = 'failed', eway_bill_error = $1 WHERE id = $2 AND company_id = $3`, [err.message, req.params.id, req.user.company_id]).catch(() => {});
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/:id/ewaybill/cancel', requireNotRole('ca'), requireMinRole('branch_manager'), async (req, res) => {
+  try {
+    const company_id = req.user.company_id;
+    const invoiceId = req.params.id;
+    const { reason, remark } = req.body || {};
+
+    const { rows: inv } = await query(
+      `SELECT eway_bill_no, eway_bill_status FROM invoices WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
+      [invoiceId, company_id],
+    );
+    if (inv.length === 0) return res.status(404).json({ success: false, error: 'Invoice not found' });
+    if (!inv[0].eway_bill_no || inv[0].eway_bill_status !== 'generated') {
+      return res.status(400).json({ success: false, error: 'No active E-Way bill to cancel' });
+    }
+
+    const result = await taxpro.cancelEwayBill(company_id, inv[0].eway_bill_no, reason, remark);
+
+    await query(
+      `UPDATE invoices SET eway_bill_status = 'cancelled' WHERE id = $1 AND company_id = $2`,
+      [invoiceId, company_id],
+    );
+
+    logAudit({ companyId: company_id, userId: req.user.id, action: 'update', entity: 'eway_bill', entityId: invoiceId, oldValue: { eway_bill_status: 'generated' }, newValue: { eway_bill_status: 'cancelled' }, req });
+
+    res.json({ success: true, data: { eway_bill_status: 'cancelled', cancel_date: result.cancelDate } });
+  } catch (err) {
+    console.error('E-Way cancellation failed:', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
