@@ -569,7 +569,7 @@ export default function VehicleDetailPage() {
           </div>
           <div>
             <Button variant="outline" asChild>
-              <a href={`/api/vehicles/${vehicle.id}/label`} target="_blank" rel="noreferrer">
+              <a href={`/api/vehicles/${vehicle.id}/label?token=${useAuthStore.getState().token}`} target="_blank" rel="noreferrer">
                 <Printer className="h-4 w-4 mr-2" />
                 Print Label
               </a>

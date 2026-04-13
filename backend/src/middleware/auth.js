@@ -1,12 +1,18 @@
 const jwt = require('jsonwebtoken');
 
 function verifyToken(req, res, next) {
+  let token = null;
   const header = req.headers.authorization;
-  if (!header || !header.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Access token required' });
+
+  if (header && header.startsWith('Bearer ')) {
+    token = header.split(' ')[1];
+  } else if (req.query.token) {
+    token = req.query.token;
   }
 
-  const token = header.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = {

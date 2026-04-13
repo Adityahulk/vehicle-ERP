@@ -323,7 +323,7 @@ export default function InventoryPage() {
         <div className="flex flex-wrap gap-2">
           {selectedIds.size > 0 && (
             <Button variant="secondary" asChild>
-              <a href={`/api/vehicles/barcodes/batch?ids=${Array.from(selectedIds).join(',')}`} target="_blank" rel="noreferrer">
+              <a href={`/api/vehicles/barcodes/batch?ids=${Array.from(selectedIds).join(',')}&token=${useAuthStore.getState().token}`} target="_blank" rel="noreferrer">
                 <Printer className="mr-2 h-4 w-4" /> Print Labels ({selectedIds.size})
               </a>
             </Button>
