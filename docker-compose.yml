@@ -77,6 +77,9 @@ services:
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
       TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
       TWO_FACTOR_API_KEY: ${TWO_FACTOR_API_KEY:-}
+      CLEARTAX_ENV: ${CLEARTAX_ENV:-sandbox}
+      CLEARTAX_AUTH_TOKEN: ${CLEARTAX_AUTH_TOKEN:-}
+      CLEARTAX_GSTIN: ${CLEARTAX_GSTIN:-}
     volumes:
       - uploads:/app/uploads
     healthcheck:

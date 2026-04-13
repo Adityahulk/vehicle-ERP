@@ -67,7 +67,7 @@ async function gstr1(req, res) {
 
       if (inv.customer_gstin && inv.customer_gstin.length >= 15) {
         b2b.push(entry);
-      } else if (Number(inv.total) > 250000_00) {
+      } else if (Number(inv.igst_amount) > 0 && Number(inv.total) > 250000_00) {
         b2cLarge.push(entry);
       } else {
         b2cSmall.push(entry);
