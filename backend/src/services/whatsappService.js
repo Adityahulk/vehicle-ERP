@@ -57,7 +57,19 @@ function generateShareLink(type, id, companyId) {
   return `${publicBaseUrl()}${path}`;
 }
 
-async function sendViaProvider(toDigits10, messageText) {
+function generateSharePdfLink(type, id, companyId) {
+  const token = jwt.sign(
+    { id, type, companyId },
+    shareSecret(),
+    { expiresIn: '7d' },
+  );
+  const path = type === 'invoice'
+    ? `/api/share/invoice/${id}/pdf?token=${encodeURIComponent(token)}`
+    : `/api/share/quotation/${id}/pdf?token=${encodeURIComponent(token)}`;
+  return `${publicBaseUrl()}${path}`;
+}
+
+async function sendViaProvider(toDigits10, messageText, mediaUrl = null) {
   const provider = (process.env.WHATSAPP_PROVIDER || 'mock').toLowerCase();
 
   if (provider === 'mock') {
@@ -85,11 +97,15 @@ async function sendViaProvider(toDigits10, messageText) {
 
   try {
     const twilio = require('twilio')(accountSid, authToken);
-    const result = await twilio.messages.create({
+    const msgPayload = {
       body: messageText,
       from: fromNorm.startsWith('+') ? `whatsapp:${fromNorm}` : `whatsapp:+${fromNorm.replace(/^\+/, '')}`,
       to: toWa,
-    });
+    };
+    if (mediaUrl) {
+      msgPayload.mediaUrl = [mediaUrl];
+    }
+    const result = await twilio.messages.create(msgPayload);
     return { success: true, provider_message_id: result.sid };
   } catch (err) {
     return { success: false, error: err.message || String(err) };
@@ -108,6 +124,7 @@ async function sendWhatsApp({
   referenceType = null,
   variables = {},
   triggeredByUserId = null,
+  mediaUrl = null,
 }) {
   const mobile = normalizeIndianMobile(recipientPhone);
   if (!mobile) {
@@ -125,7 +142,7 @@ async function sendWhatsApp({
   }
 
   const text = buildMessage(tplRows[0].template_body, variables);
-  const prov = await sendViaProvider(mobile, text);
+  const prov = await sendViaProvider(mobile, text, mediaUrl);
   const status = prov.success ? 'sent' : 'failed';
   const now = new Date().toISOString();
 
@@ -169,12 +186,13 @@ async function sendCustomMessage({
   recipientName,
   messageBody,
   triggeredByUserId = null,
+  mediaUrl = null,
 }) {
   const mobile = normalizeIndianMobile(recipientPhone);
   if (!mobile) {
     return { success: false, error: 'Invalid phone number' };
   }
-  const prov = await sendViaProvider(mobile, messageBody);
+  const prov = await sendViaProvider(mobile, messageBody, mediaUrl);
   const now = new Date().toISOString();
   const status = prov.success ? 'sent' : 'failed';
   const { rows: logRows } = await query(
@@ -264,9 +282,10 @@ module.exports = {
   sendCustomMessage,
   sendBulkWhatsApp,
   sendRawWhatsApp,
-  extractPlaceholders,
+  generateShareLink,
+  generateSharePdfLink,
   validateTemplatePlaceholders,
-  REQUIRED_BY_TYPE,
+  buildMessage,
   shareSecret,
   publicBaseUrl,
 };

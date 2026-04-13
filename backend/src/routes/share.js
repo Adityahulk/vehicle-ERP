@@ -2,7 +2,8 @@ const { Router } = require('express');
 const jwt = require('jsonwebtoken');
 const ic = require('../controllers/invoicesController');
 const { loadQuotationBundle, buildQuotationHtml } = require('../controllers/quotationsController');
-const { generateInvoiceHtmlForPreview } = require('../services/pdfService');
+const { generateInvoiceHtmlForPreview, generateInvoicePdf } = require('../services/pdfService');
+const { htmlToPdfBuffer } = require('../services/htmlToPdf');
 const { shareSecret } = require('../services/whatsappService');
 
 const router = Router();
@@ -48,6 +49,33 @@ router.get('/invoice/:id', async (req, res) => {
   }
 });
 
+router.get('/invoice/:id/pdf', async (req, res) => {
+  try {
+    const token = req.query.token;
+    if (!token) return res.status(403).send('Missing token.');
+    let payload;
+    try {
+      payload = jwt.verify(token, shareSecret());
+    } catch (e) {
+      if (e.name === 'TokenExpiredError') return res.status(403).send('Expired.');
+      return res.status(403).send('Invalid.');
+    }
+    if (payload.type !== 'invoice' || String(payload.id) !== String(req.params.id)) {
+      return res.status(403).send('Invalid.');
+    }
+    const companyId = payload.companyId;
+    const data = await ic.fetchFullInvoice(req.params.id, companyId);
+    if (!data) return res.status(404).send('Not found.');
+    const pdfBuf = await generateInvoicePdf(data, companyId);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="invoice-${data.invoice.invoice_number}.pdf"`);
+    res.send(pdfBuf);
+  } catch (err) {
+    console.error('share invoice pdf:', err.message);
+    res.status(500).send('Error');
+  }
+});
+
 router.get('/quotation/:id', async (req, res) => {
   try {
     const token = req.query.token;
@@ -78,6 +106,34 @@ router.get('/quotation/:id', async (req, res) => {
   } catch (err) {
     console.error('share quotation:', err.message);
     res.status(500).type('html').send(htmlError('Unable to load quotation.'));
+  }
+});
+
+router.get('/quotation/:id/pdf', async (req, res) => {
+  try {
+    const token = req.query.token;
+    if (!token) return res.status(403).send('Missing token.');
+    let payload;
+    try {
+      payload = jwt.verify(token, shareSecret());
+    } catch (e) {
+      if (e.name === 'TokenExpiredError') return res.status(403).send('Expired.');
+      return res.status(403).send('Invalid.');
+    }
+    if (payload.type !== 'quotation' || String(payload.id) !== String(req.params.id)) {
+      return res.status(403).send('Invalid.');
+    }
+    const companyId = payload.companyId;
+    const bundle = await loadQuotationBundle(req.params.id, companyId);
+    if (!bundle || bundle.quotation.is_deleted) return res.status(404).send('Not found.');
+    const html = buildQuotationHtml(bundle);
+    const pdfBuf = await htmlToPdfBuffer(html);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${bundle.quotation.quotation_number}.pdf"`);
+    res.send(pdfBuf);
+  } catch (err) {
+    console.error('share quotation pdf:', err.message);
+    res.status(500).send('Error');
   }
 });
 

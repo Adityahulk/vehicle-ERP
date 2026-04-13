@@ -4,6 +4,7 @@ const {
   sendWhatsApp,
   sendCustomMessage,
   generateShareLink,
+  generateSharePdfLink,
   validateTemplatePlaceholders,
 } = require('../services/whatsappService');
 const { calculatePenalty } = require('../services/penaltyService');
@@ -60,6 +61,8 @@ async function sendInvoiceWhatsApp(req, res) {
     const bodyOverride = req.body?.message;
     let previewMessage;
     let result;
+    const pdfLink = generateSharePdfLink('invoice', invoiceId, companyId);
+    
     if (bodyOverride && String(bodyOverride).trim()) {
       result = await sendCustomMessage({
         companyId,
@@ -67,6 +70,7 @@ async function sendInvoiceWhatsApp(req, res) {
         recipientName: inv.customer_name,
         messageBody: String(bodyOverride).trim(),
         triggeredByUserId: req.user.id,
+        mediaUrl: pdfLink,
       });
       previewMessage = String(bodyOverride).trim();
     } else {
@@ -79,6 +83,7 @@ async function sendInvoiceWhatsApp(req, res) {
         referenceType: 'invoice',
         variables,
         triggeredByUserId: req.user.id,
+        mediaUrl: pdfLink,
       });
       previewMessage = result.previewMessage;
     }
@@ -139,6 +144,8 @@ async function sendQuotationWhatsApp(req, res) {
     const bodyOverride = req.body?.message;
     let previewMessage;
     let result;
+    const pdfLink = generateSharePdfLink('quotation', quotationId, companyId);
+    
     if (bodyOverride && String(bodyOverride).trim()) {
       result = await sendCustomMessage({
         companyId,
@@ -146,6 +153,7 @@ async function sendQuotationWhatsApp(req, res) {
         recipientName: custName,
         messageBody: String(bodyOverride).trim(),
         triggeredByUserId: req.user.id,
+        mediaUrl: pdfLink,
       });
       previewMessage = String(bodyOverride).trim();
     } else {
@@ -158,6 +166,7 @@ async function sendQuotationWhatsApp(req, res) {
         referenceType: 'quotation',
         variables,
         triggeredByUserId: req.user.id,
+        mediaUrl: pdfLink,
       });
       previewMessage = result.previewMessage;
     }
