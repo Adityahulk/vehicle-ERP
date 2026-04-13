@@ -1,6 +1,8 @@
 const { query, getClient } = require('../config/db');
 const { ROLE_HIERARCHY } = require('../middleware/role');
 const { logAudit } = require('../middleware/auditLog');
+const { generateBarcodeBuffer, generateQRCodeBuffer, generateVehicleLabelHTML, generateBatchLabelsHTML } = require('../services/barcodeService');
+const { htmlToPdfBuffer } = require('../services/pdfService');
 
 async function listVehicles(req, res) {
   const company_id = req.user.company_id;
@@ -435,8 +437,112 @@ async function checkChassisAvailable(req, res) {
   res.json({ available: rows.length === 0 });
 }
 
+async function getBarcode(req, res) {
+  try {
+    const { id } = req.params;
+    const company_id = req.user.company_id;
+    const { rows } = await query(`SELECT chassis_number FROM vehicles WHERE id = $1 AND company_id = $2`, [id, company_id]);
+    if (!rows.length) return res.status(404).send('Not found');
+    const buf = await generateBarcodeBuffer(rows[0].chassis_number);
+    res.setHeader('Content-Type', 'image/png');
+    res.send(buf);
+  } catch (err) {
+    res.status(500).send('Error');
+  }
+}
+
+async function getQRCode(req, res) {
+  try {
+    const { id } = req.params;
+    const company_id = req.user.company_id;
+    const { rows } = await query(`SELECT chassis_number, make, model FROM vehicles WHERE id = $1 AND company_id = $2`, [id, company_id]);
+    if (!rows.length) return res.status(404).send('Not found');
+    const buf = await generateQRCodeBuffer(rows[0].chassis_number, rows[0].make, rows[0].model);
+    res.setHeader('Content-Type', 'image/png');
+    res.send(buf);
+  } catch (err) {
+    res.status(500).send('Error');
+  }
+}
+
+async function getVehicleLabelPdf(req, res) {
+  try {
+    const { id } = req.params;
+    const company_id = req.user.company_id;
+    const { rows } = await query(`
+      SELECT v.*, b.name as branch_name 
+      FROM vehicles v 
+      LEFT JOIN branches b ON b.id = v.branch_id 
+      WHERE v.id = $1 AND v.company_id = $2`, [id, company_id]);
+    if (!rows.length) return res.status(404).send('Not found');
+    
+    const { rows: co } = await query(`SELECT name FROM companies WHERE id = $1`, [company_id]);
+    
+    // We cannot use localhost links for images inside puppeteer reliably, 
+    // it's better to render barcode to base64 and inject it for offline rendering.
+    const barcodeBuf = await generateBarcodeBuffer(rows[0].chassis_number);
+    const qrcodeBuf = await generateQRCodeBuffer(rows[0].chassis_number, rows[0].make, rows[0].model);
+    
+    const html = generateVehicleLabelHTML(rows[0], co[0], { name: rows[0].branch_name })
+      .replace(`http://localhost:4000/api/vehicles/${id}/barcode`, `data:image/png;base64,${barcodeBuf.toString('base64')}`)
+      .replace(`http://localhost:4000/api/vehicles/${id}/qrcode`, `data:image/png;base64,${qrcodeBuf.toString('base64')}`);
+      
+    const pdf = await htmlToPdfBuffer(html);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="label-${rows[0].chassis_number}.pdf"`);
+    res.send(pdf);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error');
+  }
+}
+
+async function batchBarcodesPdf(req, res) {
+  try {
+    const { ids } = req.query;
+    if (!ids) return res.status(400).send('No ids provided');
+    const idArray = ids.split(',');
+    if (!idArray.length) return res.status(400).send('No ids provided');
+
+    const company_id = req.user.company_id;
+    const { rows } = await query(`
+      SELECT v.*, b.name as branch_name 
+      FROM vehicles v 
+      LEFT JOIN branches b ON b.id = v.branch_id 
+      WHERE v.id = ANY($1) AND v.company_id = $2`, [idArray, company_id]);
+      
+    if (!rows.length) return res.status(404).send('Not found');
+    
+    const { rows: co } = await query(`SELECT name FROM companies WHERE id = $1`, [company_id]);
+    
+    const htmls = [];
+    for (const v of rows) {
+      const barcodeBuf = await generateBarcodeBuffer(v.chassis_number);
+      const qrcodeBuf = await generateQRCodeBuffer(v.chassis_number, v.make, v.model);
+      
+      const html = generateVehicleLabelHTML(v, co[0], { name: v.branch_name })
+        .replace(`http://localhost:4000/api/vehicles/${v.id}/barcode`, `data:image/png;base64,${barcodeBuf.toString('base64')}`)
+        .replace(`http://localhost:4000/api/vehicles/${v.id}/qrcode`, `data:image/png;base64,${qrcodeBuf.toString('base64')}`);
+      htmls.push(html);
+    }
+    
+    const batchHtml = generateBatchLabelsHTML(htmls);
+    const pdf = await htmlToPdfBuffer(batchHtml);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="labels-batch.pdf"`);
+    res.send(pdf);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error');
+  }
+}
+
 module.exports = {
   listVehicles, createVehicle, getVehicle, updateVehicle,
   transferVehicle, inventorySummary, branchInventory,
   searchVehicles, expiringInsurance, checkChassisAvailable,
+  getBarcode,
+  getQRCode,
+  getVehicleLabelPdf,
+  batchBarcodesPdf,
 };

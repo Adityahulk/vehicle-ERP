@@ -420,7 +420,8 @@ export default function SalesPage() {
   const [previewInvoice, setPreviewInvoice] = useState(null);
   const [waDialog, setWaDialog] = useState(null);
   const [waMeta, setWaMeta] = useState({});
-  const [pdfTemplateChoice, setPdfTemplateChoice] = useState({});
+  const [whatsappLogs, setWhatsappLogs] = useState({});
+
 
   const markInvoiceWaSent = useCallback((invoiceId) => {
     const now = Date.now();
@@ -683,9 +684,9 @@ export default function SalesPage() {
                           <ShieldX className="h-3.5 w-3.5 text-amber-600" />
                         </Button>
                       )}
-                      {/* E-WAY BILL BUTTONS */}
+                      {/* E-WAY BILL BUTTON (CLEARTAX) */}
                       {inv.irn_status === 'generated' && (!inv.eway_bill_status || inv.eway_bill_status !== 'generated') && canWrite && (
-                        <Button variant="ghost" size="sm" title="Generate E-Way Bill"
+                        <Button variant="ghost" size="sm" title="Generate E-Way Bill (ClearTax)"
                           onClick={() => { 
                             const distance = window.prompt("Enter Distance (km):", "100");
                             if (!distance) return;
@@ -701,10 +702,19 @@ export default function SalesPage() {
                               transport_mode: "1"
                             }).then(() => {
                               queryClient.invalidateQueries({ queryKey: ['invoices'] });
-                              toast.success('E-Way Bill Generated Successfully!');
+                              toast.success('E-Way Bill Generated Successfully via ClearTax!');
                             }).catch(err => toast.error(err.response?.data?.error || 'E-Way bill generation failed'));
                           }}>
-                          <ShieldCheck className="h-3.5 w-3.5 text-blue-600" /> EWB
+                          <FileText className="h-3.5 w-3.5 text-blue-600" />
+                          <span className="sr-only">E-Way Bill</span>
+                        </Button>
+                      )}
+                      {inv.eway_bill_status === 'generated' && (
+                        <Button variant="ghost" size="sm" title="E-Way Bill Details" onClick={() => {
+                          const msg = `E-Way Bill No: ${inv.eway_bill_no}\nValid Until: ${formatDate(inv.eway_bill_valid_until)}`;
+                          window.alert(msg);
+                        }}>
+                          <FileText className="h-3.5 w-3.5 text-blue-800" />
                         </Button>
                       )}
                       {inv.status === 'draft' && canWrite && (
@@ -755,8 +765,10 @@ export default function SalesPage() {
         invoiceId={previewInvoice?.id}
         invoiceNumber={previewInvoice?.invoice_number}
         templates={invoiceTemplates}
-        defaultTemplateId={previewInvoice?.id ? pdfTemplateChoice[previewInvoice.id] : undefined}
+        defaultTemplateId={(invoiceTemplates.find(t => t.is_default) || invoiceTemplates[0])?.id}
       />
+
+
 
       <WhatsAppSendDialog
         key={waDialog ? `wa-inv-${waDialog.id}` : 'wa-inv-closed'}

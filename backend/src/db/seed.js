@@ -84,15 +84,15 @@ async function seed() {
 
     // ── 2. Branches ───────────────────────────────────────
     const { rows: [mapusa] } = await client.query(
-      `INSERT INTO branches (company_id, name, code, address, phone)
-       VALUES ($1, 'MVG Mapusa', 'MAP', 'Shop 5, Municipal Market Road, Mapusa, Goa 403507', '9876543211')
+      `INSERT INTO branches (company_id, name, code, address, phone, city, state, pincode, state_code)
+       VALUES ($1, 'MVG Mapusa', 'MAP', 'Shop 5, Municipal Market Road, Mapusa, Goa 403507', '9876543211', 'Mapusa', 'Goa', '403507', '30')
        RETURNING id`,
       [companyId],
     );
 
     const { rows: [panaji] } = await client.query(
-      `INSERT INTO branches (company_id, name, code, address, phone)
-       VALUES ($1, 'MVG Panaji', 'PAN', '18th June Road, Near Old Secretariat, Panaji, Goa 403001', '9876543212')
+      `INSERT INTO branches (company_id, name, code, address, phone, city, state, pincode, state_code)
+       VALUES ($1, 'MVG Panaji', 'PAN', '18th June Road, Near Old Secretariat, Panaji, Goa 403001', '9876543212', 'Panaji', 'Goa', '403001', '30')
        RETURNING id`,
       [companyId],
     );
@@ -436,6 +436,14 @@ async function seed() {
          (company_id, vehicle_id, from_branch_id, to_branch_id, transferred_by, notes, transferred_at)
        VALUES ($1, $2, $3, $4, $5, 'Rebalancing stock between branches', NOW() - INTERVAL '10 days')`,
       [companyId, vehicleIds[5], mapusa.id, panaji.id, adminUser.id],
+    );
+
+    // ── 10. E-Way Bill ────────────────────────────────
+    await client.query(
+      `INSERT INTO eway_bills
+         (company_id, reference_type, reference_id, vehicle_id, eway_bill_number, generated_json, status, valid_from, valid_until, distance_km)
+       VALUES ($1, 'sale', $2, $3, '331400123456', '{"sample": "data"}', 'submitted', NOW() - INTERVAL '1 day', NOW() + INTERVAL '1 day', 15)`,
+      [companyId, invoice1.id, vehicle9],
     );
 
     await client.query('COMMIT');

@@ -13,7 +13,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import EmptyState from '@/components/EmptyState';
 import SortableTableHead, { sortData } from '@/components/SortableTableHead';
-import { Plus, ArrowRightLeft, Loader2, Search, ChevronLeft, ChevronRight, Car, Upload } from 'lucide-react';
+import { Plus, ArrowRightLeft, Loader2, Search, ChevronLeft, ChevronRight, Car, Upload, Printer } from 'lucide-react';
 import BulkImport from '@/components/BulkImport';
 import { Link } from 'react-router-dom';
 import { formatCurrency } from '@/lib/utils';
@@ -264,6 +264,7 @@ export default function InventoryPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState('asc');
 
@@ -298,11 +299,35 @@ export default function InventoryPage() {
     setTransferOpen(true);
   };
 
+  const toggleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedIds(new Set(vehicles.map((v) => v.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   return (
     <AppLayout>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <h2 className="text-2xl font-semibold">Inventory</h2>
         <div className="flex flex-wrap gap-2">
+          {selectedIds.size > 0 && (
+            <Button variant="secondary" asChild>
+              <a href={`/api/vehicles/barcodes/batch?ids=${Array.from(selectedIds).join(',')}`} target="_blank" rel="noreferrer">
+                <Printer className="mr-2 h-4 w-4" /> Print Labels ({selectedIds.size})
+              </a>
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <Upload className="mr-2 h-4 w-4" /> Import
           </Button>
@@ -368,6 +393,14 @@ export default function InventoryPage() {
         <Table>
           <thead className="[&_tr]:border-b">
             <tr>
+              <th className="h-10 px-3 text-left align-middle font-medium text-muted-foreground w-10">
+                <input 
+                  type="checkbox" 
+                  checked={vehicles.length > 0 && selectedIds.size === vehicles.length}
+                  onChange={toggleSelectAll}
+                  className="rounded border-gray-300 text-primary focus:ring-primary"
+                />
+              </th>
               <SortableTableHead sortKey="chassis_number" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort}>Chassis No.</SortableTableHead>
               <SortableTableHead sortKey="make" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort}>Vehicle</SortableTableHead>
               <SortableTableHead sortKey="color" currentSort={sortKey} currentDirection={sortDir} onSort={handleSort}>Color</SortableTableHead>
@@ -382,6 +415,14 @@ export default function InventoryPage() {
             {
               vehicles.map((v) => (
                 <TableRow key={v.id}>
+                  <TableCell>
+                    <input 
+                      type="checkbox" 
+                      checked={selectedIds.has(v.id)}
+                      onChange={() => toggleSelect(v.id)}
+                      className="rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                  </TableCell>
                   <TableCell className="font-mono text-xs">
                     <Link to={`/vehicles/${v.id}`} className="text-primary hover:underline">
                       {v.chassis_number}

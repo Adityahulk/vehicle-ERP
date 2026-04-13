@@ -63,6 +63,11 @@ router.get('/search', vc.searchVehicles);
 router.get('/expiring-insurance', requireMinRole('branch_manager'), vc.expiringInsurance);
 router.get('/inventory/summary', requireMinRole('branch_manager'), vc.inventorySummary);
 router.get('/inventory/branch/:branchId', vc.branchInventory);
+router.get('/barcodes/batch', requireMinRole('branch_manager'), vc.batchBarcodesPdf);
+router.get('/:id/barcode', vc.getBarcode);
+router.get('/:id/qrcode', vc.getQRCode);
+router.get('/:id/label', requireMinRole('branch_manager'), vc.getVehicleLabelPdf);
+
 router.get('/:id', vc.getVehicle);
 router.patch('/:id', requireNotRole('ca'), requireMinRole('branch_manager'), validateBody(updateVehicleSchema), vc.updateVehicle);
 router.post('/:id/transfer', requireNotRole('ca'), requireMinRole('branch_manager'), validateBody(transferSchema), vc.transferVehicle);

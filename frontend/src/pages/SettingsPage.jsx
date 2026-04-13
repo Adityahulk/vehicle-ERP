@@ -238,7 +238,7 @@ function CompanyTab() {
 function BranchesTab() {
   const qc = useQueryClient();
   const [dialog, setDialog] = useState(null); // null | { mode: 'add' | 'edit', branch? }
-  const [form, setForm] = useState({ name: '', address: '', phone: '', manager_id: '' });
+  const [form, setForm] = useState({ name: '', address: '', phone: '', manager_id: '', city: '', state: '', pincode: '', state_code: '' });
 
   const { data: branchData, isLoading } = useQuery({
     queryKey: ['branches'],
@@ -261,12 +261,12 @@ function BranchesTab() {
   });
 
   const openAdd = () => {
-    setForm({ name: '', address: '', phone: '', manager_id: '' });
+    setForm({ name: '', address: '', phone: '', manager_id: '', city: '', state: '', pincode: '', state_code: '' });
     setDialog({ mode: 'add' });
   };
 
   const openEdit = (b) => {
-    setForm({ name: b.name || '', address: b.address || '', phone: b.phone || '', manager_id: b.manager_id || '' });
+    setForm({ name: b.name || '', address: b.address || '', phone: b.phone || '', manager_id: b.manager_id || '', city: b.city || '', state: b.state || '', pincode: b.pincode || '', state_code: b.state_code || '' });
     setDialog({ mode: 'edit', branch: b });
   };
 
@@ -348,6 +348,40 @@ function BranchesTab() {
             <div className="space-y-1.5">
               <Label>Phone</Label>
               <Input value={form.phone} onChange={set('phone')} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>City</Label>
+                <Input value={form.city} onChange={set('city')} placeholder="e.g. Mapusa" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Pincode</Label>
+                <Input value={form.pincode} onChange={set('pincode')} maxLength={6} placeholder="e.g. 403507" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>State</Label>
+                <Select value={form.state} onValueChange={(v) => {
+                  const stateCode = INDIAN_STATES.find((s) => s.name === v)?.code || '';
+                  setForm((p) => ({ ...p, state: v, state_code: stateCode }));
+                }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select State" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INDIAN_STATES.map((s) => (
+                      <SelectItem key={s.code} value={s.name}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>State Code (GST)</Label>
+                <Input value={form.state_code} onChange={set('state_code')} maxLength={2} placeholder="e.g. 30" />
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>Assign Manager</Label>
@@ -487,6 +521,7 @@ function UsersTab() {
                     <th className="text-left py-2 font-medium text-muted-foreground">Email</th>
                     <th className="text-left py-2 font-medium text-muted-foreground">Role</th>
                     <th className="text-left py-2 font-medium text-muted-foreground">Branch</th>
+                    <th className="text-left py-2 font-medium text-muted-foreground">Joining</th>
                     <th className="text-center py-2 font-medium text-muted-foreground">Status</th>
                     <th className="text-right py-2 font-medium text-muted-foreground">Actions</th>
                   </tr>
@@ -498,6 +533,9 @@ function UsersTab() {
                       <td className="py-2">{u.email}</td>
                       <td className="py-2"><Badge variant="outline">{u.role}</Badge></td>
                       <td className="py-2">{u.branch_name || '—'}</td>
+                      <td className="py-2 text-muted-foreground text-xs whitespace-nowrap">
+                        {empByUserId[u.id]?.joining_date ? formatDate(empByUserId[u.id].joining_date) : '—'}
+                      </td>
                       <td className="py-2 text-center">
                         <Badge variant={u.is_active ? 'success' : 'destructive'}>
                           {u.is_active ? 'Active' : 'Inactive'}
@@ -535,7 +573,7 @@ function UsersTab() {
                     </tr>
                   ))}
                   {(usersData || []).length === 0 && (
-                    <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">No users found</td></tr>
+                    <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">No users found</td></tr>
                   )}
                 </tbody>
               </table>

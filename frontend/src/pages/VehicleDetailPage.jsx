@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import {
   ArrowLeft, Pencil, AlertTriangle, Clock, FileText,
-  ArrowRightLeft, Landmark, Package, Shield, Car, Loader2,
+  ArrowRightLeft, Landmark, Package, Shield, Car, Loader2, Printer,
 } from 'lucide-react';
 import { formatCurrency, formatDate, cn } from '@/lib/utils';
 import api from '@/lib/api';
@@ -224,7 +224,7 @@ function VehicleIdentitySection({ vehicle, onEdit }) {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1 mt-4">
           <DetailRow label="Chassis Number">{vehicle.chassis_number}</DetailRow>
           <DetailRow label="Engine Number">{vehicle.engine_number}</DetailRow>
           <DetailRow label="Make">{vehicle.make}</DetailRow>
@@ -233,6 +233,22 @@ function VehicleIdentitySection({ vehicle, onEdit }) {
           <DetailRow label="Color">{vehicle.color}</DetailRow>
           <DetailRow label="Year">{vehicle.year}</DetailRow>
           <DetailRow label="Branch">{vehicle.branch_name}</DetailRow>
+        </div>
+        <div className="mt-6 p-4 bg-muted/30 rounded-lg flex flex-col items-center justify-center border border-dashed border-border/60">
+          <img 
+            src={`/api/vehicles/${vehicle.id}/barcode`} 
+            alt={`Barcode for ${vehicle.chassis_number}`} 
+            className="h-16 object-contain mb-2 mix-blend-multiply"
+          />
+          <p className="font-mono text-sm tracking-widest text-muted-foreground">{vehicle.chassis_number}</p>
+          <div className="mt-3">
+            <Button size="sm" variant="outline" asChild>
+              <a href={`/api/vehicles/${vehicle.id}/label`} target="_blank" rel="noreferrer">
+                <Printer className="h-3.5 w-3.5 mr-2" />
+                Print Label
+              </a>
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -539,15 +555,25 @@ export default function VehicleDetailPage() {
     <AppLayout>
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/inventory')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/inventory')}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h1 className="text-xl font-bold">
+                {[vehicle.make, vehicle.model, vehicle.variant].filter(Boolean).join(' ') || 'Vehicle'}
+              </h1>
+              <p className="text-sm text-muted-foreground">{vehicle.chassis_number}</p>
+            </div>
+          </div>
           <div>
-            <h1 className="text-xl font-bold">
-              {[vehicle.make, vehicle.model, vehicle.variant].filter(Boolean).join(' ') || 'Vehicle'}
-            </h1>
-            <p className="text-sm text-muted-foreground">{vehicle.chassis_number}</p>
+            <Button variant="outline" asChild>
+              <a href={`/api/vehicles/${vehicle.id}/label`} target="_blank" rel="noreferrer">
+                <Printer className="h-4 w-4 mr-2" />
+                Print Label
+              </a>
+            </Button>
           </div>
         </div>
 
@@ -579,6 +605,8 @@ export default function VehicleDetailPage() {
             qc.invalidateQueries({ queryKey: ['vehicle', id] });
           }}
         />
+
+
       </div>
     </AppLayout>
   );

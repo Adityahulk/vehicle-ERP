@@ -14,6 +14,10 @@ const branchSchema = z.object({
   address: z.string().max(1000).optional(),
   phone: z.string().max(20).optional(),
   manager_id: z.string().uuid().nullable().optional(),
+  city: z.string().max(200).optional(),
+  state: z.string().max(200).optional(),
+  pincode: z.string().max(10).optional(),
+  state_code: z.string().max(5).optional(),
 });
 
 // List branches with manager name
@@ -21,6 +25,7 @@ router.get('/', async (req, res) => {
   const company_id = req.user.company_id;
   const { rows } = await query(
     `SELECT b.id, b.name, b.address, b.phone, b.manager_id,
+            b.city, b.state, b.pincode, b.state_code,
             u.name AS manager_name, u.email AS manager_email
      FROM branches b
      LEFT JOIN users u ON u.id = b.manager_id AND u.is_deleted = FALSE
@@ -38,7 +43,7 @@ router.post(
   validateBody(branchSchema),
   async (req, res) => {
     const company_id = req.user.company_id;
-    const { name, address, phone, manager_id } = req.validated;
+    const { name, address, phone, manager_id, city, state, pincode, state_code } = req.validated;
 
     if (manager_id) {
       const mgr = await query(
@@ -51,10 +56,10 @@ router.post(
     }
 
     const { rows } = await query(
-      `INSERT INTO branches (company_id, name, address, phone, manager_id)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, name, address, phone, manager_id, created_at`,
-      [company_id, name, address || null, phone || null, manager_id || null],
+      `INSERT INTO branches (company_id, name, address, phone, manager_id, city, state, pincode, state_code)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id, name, address, phone, manager_id, city, state, pincode, state_code, created_at`,
+      [company_id, name, address || null, phone || null, manager_id || null, city || null, state || null, pincode || null, state_code || null],
     );
 
     res.status(201).json({ branch: rows[0] });
@@ -89,7 +94,7 @@ router.patch(
       }
     }
 
-    const allowedFields = ['name', 'address', 'phone', 'manager_id'];
+    const allowedFields = ['name', 'address', 'phone', 'manager_id', 'city', 'state', 'pincode', 'state_code'];
     const setClauses = [];
     const params = [];
     let idx = 1;
@@ -109,7 +114,7 @@ router.patch(
     const { rows } = await query(
       `UPDATE branches SET ${setClauses.join(', ')}
        WHERE id = $${idx++} AND company_id = $${idx} AND is_deleted = FALSE
-       RETURNING id, name, address, phone, manager_id`,
+       RETURNING id, name, address, phone, manager_id, city, state, pincode, state_code`,
       params,
     );
 
