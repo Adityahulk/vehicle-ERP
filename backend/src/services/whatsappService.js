@@ -258,6 +258,7 @@ function extractPlaceholders(body) {
 
 const REQUIRED_BY_TYPE = {
   loan_overdue: ['customer_name', 'vehicle', 'due_date', 'overdue_days', 'penalty', 'branch_phone', 'company_name'],
+  loan_due_soon: ['customer_name', 'vehicle', 'due_date', 'branch_phone', 'company_name'],
   invoice_share: ['customer_name', 'company_name', 'invoice_number', 'vehicle', 'amount', 'share_link', 'branch_phone'],
   quotation_share: ['customer_name', 'company_name', 'quotation_number', 'vehicle', 'amount', 'valid_until', 'share_link', 'branch_phone'],
   loan_penalty_alert: ['customer_name', 'vehicle', 'due_date', 'overdue_days', 'penalty_per_day', 'penalty', 'branch_phone', 'company_name'],

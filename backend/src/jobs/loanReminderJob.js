@@ -151,7 +151,7 @@ function createLoanReminderWorker() {
          JOIN companies co ON co.id = l.company_id
          WHERE l.is_deleted = FALSE
            AND l.status IN ('active', 'overdue')
-           AND l.due_date < CURRENT_DATE
+           AND (l.due_date < CURRENT_DATE OR l.due_date = CURRENT_DATE + INTERVAL '7 days')
            AND c.phone IS NOT NULL AND TRIM(c.phone) <> ''`,
       );
 
@@ -163,10 +163,18 @@ function createLoanReminderWorker() {
 
       for (const loan of loans) {
         const calc = calculatePenalty(loan);
-        if (calc.calendarDaysPastDue <= 0) continue;
+        let messageType = 'loan_overdue';
 
-        const interval = reminderIntervalDays(calc.calendarDaysPastDue);
-        if (!shouldSendReminder(loan.last_reminder_sent, interval)) continue;
+        if (calc.calendarDaysPastDue < 0) {
+          if (calc.calendarDaysPastDue !== -7) continue;
+          messageType = 'loan_due_soon';
+          if (!shouldSendReminder(loan.last_reminder_sent, 7)) continue;
+        } else if (calc.calendarDaysPastDue > 0) {
+          const interval = reminderIntervalDays(calc.calendarDaysPastDue);
+          if (!shouldSendReminder(loan.last_reminder_sent, interval)) continue;
+        } else {
+          continue;
+        }
 
         processed += 1;
         const chassis = loan.chassis_number ? String(loan.chassis_number).slice(-6) : '';
@@ -189,7 +197,7 @@ function createLoanReminderWorker() {
           companyId: loan.company_id,
           recipientPhone: loan.customer_phone,
           recipientName: loan.customer_name,
-          messageType: 'loan_overdue',
+          messageType,
           referenceId: loan.id,
           referenceType: 'loan',
           variables,

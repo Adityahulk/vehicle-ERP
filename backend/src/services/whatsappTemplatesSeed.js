@@ -71,6 +71,21 @@ Please clear your dues to stop penalty accumulation.
 
 — {company_name}`,
   },
+  {
+    name: 'Loan upcoming reminder',
+    message_type: 'loan_due_soon',
+    template_body: `Dear {customer_name},
+
+This is a friendly reminder that your upcoming loan payment for {vehicle} is due next week.
+
+Due Date: {due_date}
+
+To avoid late payment penalties, please make sure your payment is completed on or before the due date.
+
+📞 {branch_phone}
+
+— {company_name}`,
+  },
 ];
 
 async function seedWhatsappTemplates(companyId, client = null) {
