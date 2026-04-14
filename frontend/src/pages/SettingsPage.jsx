@@ -27,7 +27,7 @@ import api from '@/lib/api';
 import useAuthStore from '@/store/authStore';
 import { Building2, GitBranch, Users, Receipt, FileText, Loader2, Upload, Eye, EyeOff, RotateCcw, Plus, Pencil, UserCircle } from 'lucide-react';
 import InvoiceTemplates from '@/pages/InvoiceTemplates';
-import { toInputDate } from '@/lib/utils';
+import { toInputDate, formatDate } from '@/lib/utils';
 import { toast } from 'sonner';
 
 const INDIAN_STATES = [
@@ -444,7 +444,7 @@ function emptyUserForm() {
 function UsersTab() {
   const qc = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
-  const [addForm, setAddForm] = useState(emptyUserForm);
+  const [addForm, setAddForm] = useState(() => emptyUserForm());
   const [resetResult, setResetResult] = useState(null);
 
   const { data: usersData, isLoading } = useQuery({
