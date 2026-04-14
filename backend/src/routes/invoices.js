@@ -13,7 +13,7 @@ const {
   buildDummyInvoiceData,
   buildStandardInvoiceHtml,
 } = require('../services/invoiceTemplateRender');
-const cleartax = require('../services/cleartaxService');
+const taxpro = require('../services/taxproService');
 const { query } = require('../config/db');
 const { logAudit } = require('../middleware/auditLog');
 
@@ -66,11 +66,11 @@ router.get('/preview-template', requireMinRole('company_admin'), async (req, res
   }
 });
 
-// ClearTax status check must be before /:id routes to avoid param collision
+// Taxpro status check must be before /:id routes to avoid param collision
 router.get('/einvoice/status', (_req, res) => {
   res.json({
-    enabled: cleartax.isCleartaxEnabled(),
-    environment: process.env.CLEARTAX_ENV || 'sandbox',
+    enabled: taxpro.isTaxproEnabled(),
+    environment: process.env.TAXPRO_ENV || 'sandbox',
   });
 });
 
@@ -122,31 +122,53 @@ router.get('/:id', ic.getInvoice);
 router.patch('/:id/cancel', requireNotRole('ca'), requireMinRole('branch_manager'), ic.cancelInvoice);
 router.patch('/:id/confirm', requireNotRole('ca'), ic.confirmInvoice);
 
-// ─── E-Invoice (ClearTax) Routes ──────────────────────────────
+// ─── E-Invoice (Taxpro GSP) Routes ───────────────────────────
 
 router.post('/:id/einvoice/generate', requireNotRole('ca'), requireMinRole('branch_manager'), async (req, res) => {
   try {
     const company_id = req.user.company_id;
     const invoiceId = req.params.id;
 
-    if (!cleartax.isCleartaxEnabled()) {
-      return res.status(400).json({ success: false, error: 'ClearTax is not configured. Set CLEARTAX_* environment variables.' });
+    if (!taxpro.isTaxproEnabled()) {
+      return res.status(400).json({ success: false, error: 'Taxpro is not configured. Set TAXPRO_* environment variables.' });
     }
 
-    const { rows: inv } = await query(
-      `SELECT id, status, irn, irn_status FROM invoices WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
+    const { rows: invData } = await query(
+      `SELECT i.*, 
+       json_agg(json_build_object(
+         'description', ii.description,
+         'hsn_code', ii.hsn_code,
+         'quantity', ii.quantity,
+         'unit_price', ii.unit_price,
+         'cgst_rate', ii.cgst_rate,
+         'sgst_rate', ii.sgst_rate,
+         'igst_rate', ii.igst_rate,
+         'cgst_amount', ii.cgst_amount,
+         'sgst_amount', ii.sgst_amount,
+         'igst_amount', ii.igst_amount
+       )) as items
+       FROM invoices i
+       JOIN invoice_items ii ON i.id = ii.invoice_id
+       WHERE i.id = $1 AND i.company_id = $2
+       GROUP BY i.id`,
       [invoiceId, company_id],
     );
-    if (inv.length === 0) return res.status(404).json({ success: false, error: 'Invoice not found' });
-    if (inv[0].status !== 'confirmed') return res.status(400).json({ success: false, error: 'Only confirmed invoices can generate e-invoice' });
-    if (inv[0].irn && inv[0].irn_status === 'generated') return res.status(400).json({ success: false, error: 'E-invoice already generated', irn: inv[0].irn });
 
-    const invoiceData = await ic.fetchFullInvoice(invoiceId, company_id);
-    const result = await cleartax.generateIRN(company_id, invoiceData);
+    if (invData.length === 0) return res.status(404).json({ success: false, error: 'Invoice not found' });
+    const invoice = invData[0];
+
+    if (invoice.status !== 'confirmed') {
+      return res.status(400).json({ success: false, error: 'Only confirmed invoices can generate e-invoice' });
+    }
+
+    if (invoice.irn_status === 'generated') {
+      return res.status(400).json({ success: false, error: 'E-Invoice already generated', irn: invoice.irn });
+    }
+
+    const result = await taxpro.generateIRN(company_id, { invoice, items: invoice.items });
 
     await query(
-      `UPDATE invoices SET irn = $1, ack_number = $2, ack_date = $3, signed_qr = $4,
-       signed_invoice = $5, irn_status = 'generated', irn_date = NOW()
+      `UPDATE invoices SET irn = $1, ack_number = $2, ack_date = $3, signed_qr = $4, signed_invoice = $5, irn_status = 'generated'
        WHERE id = $6 AND company_id = $7`,
       [result.irn, result.ackNumber, result.ackDate, result.signedQr, result.signedInvoice, invoiceId, company_id],
     );
@@ -194,7 +216,7 @@ router.post('/:id/einvoice/cancel', requireNotRole('ca'), requireMinRole('branch
       return res.status(400).json({ success: false, error: 'E-invoice can only be cancelled within 24 hours of generation' });
     }
 
-    const result = await cleartax.cancelIRN(company_id, inv[0].irn, reason, remark);
+    const result = await taxpro.cancelIRN(company_id, inv[0].irn, reason, remark);
 
     await query(
       `UPDATE invoices SET irn_status = 'cancelled', irn_cancel_date = $1, irn_cancel_reason = $2
@@ -227,15 +249,15 @@ router.get('/:id/einvoice', async (req, res) => {
   }
 });
 
-// ─── E-Way Bill (ClearTax) Routes ──────────────────────────────
+// ─── E-Way Bill (Taxpro GSP) Routes ───────────────────────────
 
 router.post('/:id/ewaybill/generate', requireNotRole('ca'), requireMinRole('branch_manager'), async (req, res) => {
   try {
     const company_id = req.user.company_id;
     const invoiceId = req.params.id;
 
-    if (!cleartax.isCleartaxEnabled()) {
-      return res.status(400).json({ success: false, error: 'ClearTax is not configured. Set CLEARTAX_* environment variables.' });
+    if (!taxpro.isTaxproEnabled()) {
+      return res.status(400).json({ success: false, error: 'Taxpro is not configured. Set TAXPRO_* environment variables.' });
     }
 
     const transportArgs = req.body;
@@ -252,7 +274,7 @@ router.post('/:id/ewaybill/generate', requireNotRole('ca'), requireMinRole('bran
     if (!inv[0].irn || inv[0].irn_status !== 'generated') return res.status(400).json({ success: false, error: 'Generate IRN before E-way bill' });
     if (inv[0].eway_bill_no) return res.status(400).json({ success: false, error: 'E-Way bill already generated', ewbNo: inv[0].eway_bill_no });
 
-    const result = await cleartax.generateEwayBill(company_id, inv[0].irn, transportArgs);
+    const result = await taxpro.generateEwayBill(company_id, inv[0].irn, transportArgs);
 
     await query(
       `UPDATE invoices SET eway_bill_no = $1, eway_bill_date = $2, eway_bill_valid_until = $3, eway_bill_status = 'generated',
@@ -286,7 +308,7 @@ router.post('/:id/ewaybill/cancel', requireNotRole('ca'), requireMinRole('branch
       return res.status(400).json({ success: false, error: 'No active E-Way bill to cancel' });
     }
 
-    const result = await cleartax.cancelEwayBill(company_id, inv[0].eway_bill_no, reason, remark);
+    const result = await taxpro.cancelEwayBill(company_id, inv[0].eway_bill_no, reason, remark);
 
     await query(
       `UPDATE invoices SET eway_bill_status = 'cancelled' WHERE id = $1 AND company_id = $2`,

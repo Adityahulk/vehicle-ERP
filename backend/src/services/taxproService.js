@@ -1,46 +1,129 @@
 /**
- * ClearTax E-Invoice & E-Way Bill Integration Service
- * API Docs: https://docs.cleartax.in
+ * Taxpro GSP E-Invoice & E-Way Bill Integration Service
+ * API Docs: http://help.taxprogsp.co.in/ucl
  *
- * Sandbox:    https://api-sandbox.clear.in
- * Production: https://api.clear.in
- *
- * Required ENV:
- *   CLEARTAX_ENV           = sandbox | production
- *   CLEARTAX_AUTH_TOKEN     = workspace auth token from ClearTax dashboard
- *   CLEARTAX_GSTIN          = seller GSTIN registered on ClearTax
+ * This service implements the standard NIC-compliant IRN and EBS generation.
+ * Authentication logic includes automated token caching and refresh to minimize user disturbance.
  */
 
-const SANDBOX_BASE = 'https://api-sandbox.clear.in';
-const PROD_BASE = 'https://api.clear.in';
+const SANDBOX_BASE = 'https://sandbox.taxprogsp.co.in'; // Placeholder, update once registration is complete
+const PROD_BASE = 'https://api.taxprogsp.co.in';      // Placeholder, update once registration is complete
+
+const redis = require('../config/redis');
+
+// ─── Token Cache ─────────────────────────────────────────────
+let tokenCache = {
+  token: null,
+  expiry: 0,
+};
+
+const REDIS_TOKEN_KEY = 'taxpro_auth_token';
+const REDIS_EXPIRY_KEY = 'taxpro_auth_token_expiry';
 
 // ─── Config ──────────────────────────────────────────────────
 
 function getConfig() {
-  const isProduction = process.env.CLEARTAX_ENV === 'production';
+  const isProduction = process.env.TAXPRO_ENV === 'production';
   return {
     baseUrl: isProduction ? PROD_BASE : SANDBOX_BASE,
-    authToken: process.env.CLEARTAX_AUTH_TOKEN || '',
-    gstin: process.env.CLEARTAX_GSTIN || '',
+    clientId: process.env.TAXPRO_CLIENT_ID || '',
+    clientSecret: process.env.TAXPRO_CLIENT_SECRET || '',
+    username: process.env.TAXPRO_USERNAME || '',
+    password: process.env.TAXPRO_PASSWORD || '',
+    gstin: process.env.TAXPRO_GSTIN || '',
     isProduction,
   };
 }
 
-function isCleartaxEnabled() {
+function isTaxproEnabled() {
   return !!(
-    process.env.CLEARTAX_AUTH_TOKEN &&
-    process.env.CLEARTAX_GSTIN
+    process.env.TAXPRO_CLIENT_ID &&
+    process.env.TAXPRO_USERNAME &&
+    process.env.TAXPRO_PASSWORD &&
+    process.env.TAXPRO_GSTIN
   );
+}
+
+// ─── Authentication ──────────────────────────────────────────
+
+async function getAuthToken() {
+  const config = getConfig();
+  const now = Date.now();
+
+  // 1. Try Memory Cache (with 20-minute buffer)
+  if (tokenCache.token && tokenCache.expiry > now + 1200000) {
+    return tokenCache.token;
+  }
+
+  // 2. Try Redis Cache
+  try {
+    const [cachedToken, cachedExpiry] = await Promise.all([
+      redis.get(REDIS_TOKEN_KEY),
+      redis.get(REDIS_EXPIRY_KEY),
+    ]);
+
+    if (cachedToken && Number(cachedExpiry) > now + 1200000) {
+      tokenCache = { token: cachedToken, expiry: Number(cachedExpiry) };
+      return cachedToken;
+    }
+  } catch (err) {
+    console.warn('Redis Cache Retrieval failed in TaxproService:', err.message);
+  }
+
+  // 3. Login to Taxpro
+  try {
+    const response = await fetch(`${config.baseUrl}/api/Token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ClientId: config.clientId,
+        ClientSecret: config.clientSecret,
+        UserName: config.username,
+        Password: config.password,
+        Gstin: config.gstin,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data?.ErrorDetails?.[0]?.ErrorMessage || data?.Message || 'Authentication failed');
+    }
+
+    const token = data.Token;
+    const expiry = new Date(data.TokenExpiry).getTime() || (now + 6 * 60 * 60 * 1000);
+
+    // Save to Memory
+    tokenCache = { token, expiry };
+
+    // Save to Redis (survives app restarts)
+    try {
+      const ttlSec = Math.floor((expiry - now) / 1000);
+      if (ttlSec > 0) {
+        await Promise.all([
+          redis.set(REDIS_TOKEN_KEY, token, 'EX', ttlSec),
+          redis.set(REDIS_EXPIRY_KEY, expiry.toString(), 'EX', ttlSec),
+        ]);
+      }
+    } catch (redisErr) {
+      console.warn('Redis Cache Storage failed in TaxproService:', redisErr.message);
+    }
+
+    return token;
+  } catch (err) {
+    console.error('Taxpro Authentication Error:', err.message);
+    throw new Error(`Taxpro Login Failed: ${err.message}`);
+  }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-function headers(config) {
+async function getHeaders() {
+  const config = getConfig();
+  const token = await getAuthToken();
   return {
     'Content-Type': 'application/json',
-    'x-cleartax-auth-token': config.authToken,
-    'x-cleartax-product': 'EInvoice',
-    'gstin': config.gstin,
+    'Token': token,
+    'Gstin': config.gstin,
   };
 }
 
@@ -60,7 +143,7 @@ function formatDate(dateStr) {
 }
 
 // ─── Build NIC-compliant e-Invoice payload ───────────────────
-
+// Same INV-01 standard schema used previously
 function buildEInvoicePayload(invoiceData) {
   const { invoice: inv, items } = invoiceData;
 
@@ -178,78 +261,70 @@ function buildEInvoicePayload(invoiceData) {
 
 // ─── API: Generate IRN ───────────────────────────────────────
 
-async function generateIRN(_companyId, invoiceData) {
+async function generateIRN(companyId, invoiceData) {
   const config = getConfig();
   const payload = buildEInvoicePayload(invoiceData);
+  const headers = await getHeaders();
 
-  const response = await fetch(`${config.baseUrl}/einv/v2/eInvoice/generate`, {
-    method: 'PUT',
-    headers: headers(config),
-    body: JSON.stringify([payload]),
+  const response = await fetch(`${config.baseUrl}/api/einvoice/GenerateIRN`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
   });
 
   const data = await response.json();
 
-  if (!response.ok) {
-    const errMsg = data?.error?.message || data?.message || JSON.stringify(data);
-    throw new Error(`ClearTax IRN generation failed: ${errMsg}`);
+  if (!response.ok || !data.Success) {
+    const errMsg = data?.ErrorDetails?.[0]?.ErrorMessage || data?.Message || JSON.stringify(data);
+    throw new Error(`Taxpro IRN generation failed: ${errMsg}`);
   }
 
-  // ClearTax returns an array; pick first result
-  const result = Array.isArray(data) ? data[0] : data;
-  const govt = result?.govt_response || result;
-
-  if (govt?.ErrorDetails && govt.ErrorDetails.length > 0) {
-    throw new Error(`IRN Error: ${govt.ErrorDetails.map((e) => e.error_message || e.ErrorMessage).join('; ')}`);
-  }
-
+  const result = data.Data;
   return {
-    irn: govt.Irn || govt.irn,
-    ackNumber: govt.AckNo || govt.ack_no,
-    ackDate: govt.AckDt || govt.ack_dt,
-    signedQr: govt.SignedQRCode || govt.signed_qr_code || '',
-    signedInvoice: govt.SignedInvoice || govt.signed_invoice || '',
+    irn: result.Irn,
+    ackNumber: result.AckNo,
+    ackDate: result.AckDt,
+    signedQr: result.SignedQRCode || '',
+    signedInvoice: result.SignedInvoice || '',
   };
 }
 
 // ─── API: Cancel IRN ─────────────────────────────────────────
 
-async function cancelIRN(_companyId, irn, reason, remark) {
+async function cancelIRN(companyId, irn, reason, remark) {
   const config = getConfig();
+  const headers = await getHeaders();
 
-  // ClearTax cancel reason codes: 1=Duplicate, 2=Data entry mistake, 3=Order cancelled, 4=Others
-  const cancelPayload = [{
+  const cancelPayload = {
     Irn: irn,
     CnlRsn: reason || '2',
     CnlRem: remark || 'Data entry mistake',
-  }];
+  };
 
-  const response = await fetch(`${config.baseUrl}/einv/v2/eInvoice/cancel`, {
-    method: 'PUT',
-    headers: headers(config),
+  const response = await fetch(`${config.baseUrl}/api/einvoice/CancelIRN`, {
+    method: 'POST',
+    headers,
     body: JSON.stringify(cancelPayload),
   });
 
   const data = await response.json();
 
-  if (!response.ok) {
-    const errMsg = data?.error?.message || data?.message || JSON.stringify(data);
-    throw new Error(`ClearTax IRN cancellation failed: ${errMsg}`);
+  if (!response.ok || !data.Success) {
+    const errMsg = data?.ErrorDetails?.[0]?.ErrorMessage || data?.Message || JSON.stringify(data);
+    throw new Error(`Taxpro IRN cancellation failed: ${errMsg}`);
   }
-
-  const result = Array.isArray(data) ? data[0] : data;
-  const govt = result?.govt_response || result;
 
   return {
     cancelled: true,
-    cancelDate: govt?.CancelDate || govt?.cancel_date || new Date().toISOString(),
+    cancelDate: data.Data?.CancelDate || new Date().toISOString(),
   };
 }
 
 // ─── API: Generate E-Way Bill by IRN ─────────────────────────
 
-async function generateEwayBill(_companyId, irn, transportArgs) {
+async function generateEwayBill(companyId, irn, transportArgs) {
   const config = getConfig();
+  const headers = await getHeaders();
 
   if (!irn) throw new Error('IRN is required to generate E-Way Bill');
 
@@ -262,39 +337,35 @@ async function generateEwayBill(_companyId, irn, transportArgs) {
     TransDocNo: transportArgs.trans_doc_no || '',
     TransDocDt: transportArgs.trans_doc_dt || '',
     VehNo: transportArgs.vehicle_no || '',
-    VehType: transportArgs.vehicle_type || 'R', // R = Regular, O = Over Dimensional
+    VehType: transportArgs.vehicle_type || 'R',
   };
 
-  const response = await fetch(`${config.baseUrl}/einv/v2/eInvoice/ewb`, {
+  const response = await fetch(`${config.baseUrl}/api/ewaybill/GenerateEWayBillByIRN`, {
     method: 'POST',
-    headers: headers(config),
+    headers,
     body: JSON.stringify(ewbPayload),
   });
 
   const data = await response.json();
 
-  if (!response.ok) {
-    const errMsg = data?.error?.message || data?.message || JSON.stringify(data);
-    throw new Error(`ClearTax E-Way Bill generation failed: ${errMsg}`);
+  if (!response.ok || !data.Success) {
+    const errMsg = data?.ErrorDetails?.[0]?.ErrorMessage || data?.Message || JSON.stringify(data);
+    throw new Error(`Taxpro E-Way Bill generation failed: ${errMsg}`);
   }
 
-  const govt = data?.govt_response || data;
-
-  if (govt?.ErrorDetails && govt.ErrorDetails.length > 0) {
-    throw new Error(`EWB Error: ${govt.ErrorDetails.map((e) => e.error_message || e.ErrorMessage).join('; ')}`);
-  }
-
+  const result = data.Data;
   return {
-    ewbNo: govt.EwbNo || govt.ewb_no,
-    ewbDt: govt.EwbDt || govt.ewb_dt,
-    validUpto: govt.EwbValidTill || govt.ewb_valid_till,
+    ewbNo: result.EwbNo,
+    ewbDt: result.EwbDt,
+    validUpto: result.EwbValidTill,
   };
 }
 
 // ─── API: Cancel E-Way Bill ──────────────────────────────────
 
-async function cancelEwayBill(_companyId, ewbNo, reason, remark) {
+async function cancelEwayBill(companyId, ewbNo, reason, remark) {
   const config = getConfig();
+  const headers = await getHeaders();
 
   const cancelPayload = {
     ewbNo: parseInt(ewbNo, 10) || ewbNo,
@@ -302,22 +373,22 @@ async function cancelEwayBill(_companyId, ewbNo, reason, remark) {
     cancelRmrk: remark || 'Cancelled',
   };
 
-  const response = await fetch(`${config.baseUrl}/einv/v2/eInvoice/ewb/cancel`, {
+  const response = await fetch(`${config.baseUrl}/api/ewaybill/CancelEWayBill`, {
     method: 'POST',
-    headers: headers(config),
+    headers,
     body: JSON.stringify(cancelPayload),
   });
 
   const data = await response.json();
 
-  if (!response.ok) {
-    const errMsg = data?.error?.message || data?.message || JSON.stringify(data);
-    throw new Error(`ClearTax E-Way Bill cancellation failed: ${errMsg}`);
+  if (!response.ok || !data.Success) {
+    const errMsg = data?.ErrorDetails?.[0]?.ErrorMessage || data?.Message || JSON.stringify(data);
+    throw new Error(`Taxpro E-Way Bill cancellation failed: ${errMsg}`);
   }
 
   return {
     cancelled: true,
-    cancelDate: data?.cancelDate || new Date().toISOString(),
+    cancelDate: data.Data?.CancelDate || new Date().toISOString(),
   };
 }
 
@@ -327,5 +398,5 @@ module.exports = {
   generateEwayBill,
   cancelEwayBill,
   buildEInvoicePayload,
-  isCleartaxEnabled,
+  isTaxproEnabled,
 };
