@@ -1,5 +1,6 @@
 const { query } = require('../config/db');
-const { istYmd } = require('../lib/istDate');
+const { istYmd, pgDateToYmd } = require('../lib/istDate');
+const { workingDatesInRange } = require('./attendanceLeaveController');
 
 function maskAadharInput(raw) {
   if (!raw || !String(raw).trim()) return null;
@@ -440,8 +441,34 @@ async function attendanceSummary(req, res) {
 
     const byDate = {};
     for (const r of rows) {
-      const ds = typeof r.date === 'string' ? r.date.slice(0, 10) : r.date.toISOString().slice(0, 10);
-      byDate[ds] = r;
+      const ds = pgDateToYmd(r.date);
+      if (!ds) continue;
+      byDate[ds] = { ...r, date: ds };
+    }
+
+    const { rows: leaveRows } = await query(
+      `SELECT from_date, to_date FROM leave_applications
+       WHERE user_id = $1 AND company_id = $2 AND is_deleted = FALSE AND status = 'approved'
+         AND from_date <= $4::date AND to_date >= $3::date`,
+      [userId, companyId, first, last],
+    );
+
+    for (const la of leaveRows) {
+      const fromStr = pgDateToYmd(la.from_date);
+      const toStr = pgDateToYmd(la.to_date);
+      if (!fromStr || !toStr) continue;
+      for (const ds of workingDatesInRange(fromStr, toStr)) {
+        if (ds < first || ds > last) continue;
+        const prev = byDate[ds] || { date: ds };
+        byDate[ds] = {
+          ...prev,
+          date: ds,
+          status: 'on_leave',
+          clock_in: null,
+          clock_out: null,
+          hours_worked: null,
+        };
+      }
     }
 
     const y = Number(year);
@@ -461,7 +488,7 @@ async function attendanceSummary(req, res) {
       else if (ds < todayStr) absent += 1;
     }
 
-    const hoursSum = rows.reduce((acc, r) => acc + (Number(r.hours_worked) || 0), 0);
+    const hoursSum = Object.values(byDate).reduce((acc, r) => acc + (Number(r.hours_worked) || 0), 0);
 
     res.json({
       year,

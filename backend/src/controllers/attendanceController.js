@@ -1,5 +1,6 @@
 const { query } = require('../config/db');
-const { istYmd } = require('../lib/istDate');
+const { istYmd, pgDateToYmd } = require('../lib/istDate');
+const { workingDatesInRange } = require('./attendanceLeaveController');
 
 async function clockIn(req, res) {
   try {
@@ -356,8 +357,34 @@ async function myMonthly(req, res) {
 
     const byDate = {};
     for (const r of rows) {
-      const ds = typeof r.date === 'string' ? r.date.slice(0, 10) : r.date.toISOString().slice(0, 10);
-      byDate[ds] = r;
+      const ds = pgDateToYmd(r.date);
+      if (!ds) continue;
+      byDate[ds] = { ...r, date: ds };
+    }
+
+    const { rows: leaveRows } = await query(
+      `SELECT from_date, to_date FROM leave_applications
+       WHERE user_id = $1 AND company_id = $2 AND is_deleted = FALSE AND status = 'approved'
+         AND from_date <= $4::date AND to_date >= $3::date`,
+      [userId, companyId, first, last],
+    );
+
+    for (const la of leaveRows) {
+      const fromStr = pgDateToYmd(la.from_date);
+      const toStr = pgDateToYmd(la.to_date);
+      if (!fromStr || !toStr) continue;
+      for (const ds of workingDatesInRange(fromStr, toStr)) {
+        if (ds < first || ds > last) continue;
+        const prev = byDate[ds] || { date: ds };
+        byDate[ds] = {
+          ...prev,
+          date: ds,
+          status: 'on_leave',
+          clock_in: null,
+          clock_out: null,
+          hours_worked: null,
+        };
+      }
     }
 
     const y = Number(year);
@@ -377,12 +404,26 @@ async function myMonthly(req, res) {
       else if (ds < todayStr) absent += 1;
     }
 
-    const hoursSum = rows.reduce((acc, r) => acc + (Number(r.hours_worked) || 0), 0);
+    const days = Object.keys(byDate)
+      .sort()
+      .map((ds) => {
+        const o = byDate[ds];
+        return {
+          date: ds,
+          clock_in: o.clock_in,
+          clock_out: o.clock_out,
+          status: o.status ?? null,
+          notes: o.notes ?? null,
+          hours_worked: o.hours_worked != null ? o.hours_worked : null,
+        };
+      });
+
+    const hoursSum = days.reduce((acc, r) => acc + (Number(r.hours_worked) || 0), 0);
 
     res.json({
       year,
       month,
-      days: rows,
+      days,
       summary: {
         present,
         absent,
@@ -450,9 +491,42 @@ async function branchMonthly(req, res) {
     const byUser = {};
     for (const r of attRows) {
       const uid = r.user_id;
-      const ds = typeof r.date === 'string' ? r.date.slice(0, 10) : r.date.toISOString().slice(0, 10);
+      const ds = pgDateToYmd(r.date);
+      if (!ds) continue;
       if (!byUser[uid]) byUser[uid] = {};
       byUser[uid][ds] = r;
+    }
+
+    const { rows: leaveRows } = await query(
+      `SELECT la.user_id, la.from_date, la.to_date
+       FROM leave_applications la
+       JOIN users u ON u.id = la.user_id
+       WHERE la.company_id = $1 AND la.is_deleted = FALSE AND la.status = 'approved'
+         AND u.branch_id = $2 AND u.is_deleted = FALSE AND u.is_active = TRUE
+         AND u.role = ANY($5)
+         AND la.from_date <= $4::date AND la.to_date >= $3::date`,
+      [companyId, branchId, first, last, allowedRoles],
+    );
+
+    for (const la of leaveRows) {
+      const uid = la.user_id;
+      const fromStr = pgDateToYmd(la.from_date);
+      const toStr = pgDateToYmd(la.to_date);
+      if (!fromStr || !toStr) continue;
+      if (!byUser[uid]) byUser[uid] = {};
+      for (const ds of workingDatesInRange(fromStr, toStr)) {
+        if (ds < first || ds > last) continue;
+        const prev = byUser[uid][ds] || {};
+        byUser[uid][ds] = {
+          ...prev,
+          user_id: uid,
+          date: ds,
+          status: 'on_leave',
+          clock_in: null,
+          clock_out: null,
+          hours_worked: null,
+        };
+      }
     }
 
     res.json({

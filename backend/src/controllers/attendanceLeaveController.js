@@ -1,16 +1,14 @@
 const { query, getClient } = require('../config/db');
 const { getLeaveTypeById, seedDefaultLeaveTypes } = require('../services/leaveTypesService');
 const { sendWhatsApp } = require('../services/notificationService');
-const { istYmd } = require('../lib/istDate');
+const { istYmd, pgDateToYmd } = require('../lib/istDate');
 
 function todayYmd() {
   return istYmd();
 }
 
 function rowDate(d) {
-  if (!d) return null;
-  if (typeof d === 'string') return d.slice(0, 10);
-  return d.toISOString().slice(0, 10);
+  return pgDateToYmd(d);
 }
 
 function parseYmd(s) {
