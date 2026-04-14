@@ -62,9 +62,16 @@ async function seed() {
     // ── 1. Company ────────────────────────────────────────
     const { rows: [company] } = await client.query(
       `INSERT INTO companies (name, gstin, address, phone, email, state_code, default_hsn_code, default_gst_rate)
-       VALUES ('Mavidya Group - Pradeep Guru Company', '27AABCD1234E1Z5',
-               'Plot 42, Industrial Estate, Mapusa, Goa 403507',
-               '9876543210', 'info@mavidyagroup.com', '30', '8703', 28.00)
+       VALUES (
+ 'MAVIDYA MVG PRADEEP GURU SYSTEM PRIVATE LIMITED',
+         '07AASCM8531F1Z4',
+         '1st Floor, 102, 52A, V81, Capital Tree, Jain Uniform Street, Nattu Sweets, Laxmi Nagar, Vijay Block, New Delhi - 110092',
+         '626006629',
+         'accounts@mavidya.com',
+         '07',
+         '8703',
+         28.00
+       )
        RETURNING id`,
     );
     const companyId = company.id;
@@ -75,24 +82,83 @@ async function seed() {
     await client.query(
       `INSERT INTO invoice_templates (company_id, name, is_default, template_key, layout_config)
        VALUES
-         ($1, 'Standard GST Invoice', TRUE, 'standard',
-          '{"show_logo": true, "show_signature": true, "show_qr_code": false, "show_bank_details": false, "show_terms": true, "terms_text": "Goods once sold will not be taken back or exchanged. Subject to local jurisdiction.", "primary_color": "#1a56db", "font": "default", "header_style": "left-aligned", "show_vehicle_details_block": true, "show_loan_summary": false, "footer_text": "", "bank_details": ""}'::jsonb),
+         ($1, 'GST Trade Invoice (full)', TRUE, 'trade',
+          $2::jsonb),
+         ($1, 'Standard GST Invoice', FALSE, 'standard',
+          '{"show_logo": true, "logo_asset": "mvg_group", "show_signature": true, "signature_asset": "company_upload", "show_qr_code": false, "show_bank_details": false, "show_terms": true, "terms_text": "Goods once sold will not be taken back or exchanged. Subject to local jurisdiction.", "primary_color": "#1a56db", "font": "default", "header_style": "left-aligned", "show_vehicle_details_block": true, "show_loan_summary": false, "footer_text": "", "bank_details": ""}'::jsonb),
          ($1, 'Simple Invoice', FALSE, 'simple',
-          '{"show_logo": false, "show_signature": true, "show_qr_code": false, "show_bank_details": false, "show_terms": false, "terms_text": "", "primary_color": "#374151", "font": "default", "header_style": "left-aligned", "show_vehicle_details_block": true, "show_loan_summary": false, "footer_text": "", "bank_details": ""}'::jsonb)`,
-      [companyId],
+          '{"show_logo": false, "show_signature": true, "signature_asset": "company_upload", "show_qr_code": false, "show_bank_details": false, "show_terms": false, "terms_text": "", "primary_color": "#374151", "font": "default", "header_style": "left-aligned", "show_vehicle_details_block": true, "show_loan_summary": false, "footer_text": "", "bank_details": ""}'::jsonb),
+         ($1, 'Rudra Green Legender (Proprietor)', FALSE, 'trade',
+          $3::jsonb)`,
+      [
+        companyId,
+        JSON.stringify({
+          show_logo: true,
+          logo_asset: 'mvg_group',
+          show_signature: true,
+          signature_asset: 'mavidya_director',
+          signatory_title: 'Authorised Signatory',
+          original_copy_label: 'ORIGINAL FOR RECIPIENT',
+          ship_to_same_as_billing: true,
+          show_bank_details: true,
+          bank_details:
+            'MAVIDYA MVG PRADEEP GURU SYSTEM PVT.LTD.\n'
+            + 'SBI A/C NO. 20529090825 | IFSC SBIN0007085 | Branch: Swasthya Vihar, New Delhi\n'
+            + 'RBL A/C No. 409002393507 | IFSC RATN0000296 | Branch: Daryaganj, New Delhi',
+          show_terms: true,
+          terms_text:
+            '1) All subject to Delhi jurisdiction only.\n'
+            + '2) Goods sold will not be taken back.\n'
+            + '3) Interest will be recovered @24% p.a. on bills not paid on due date.',
+          primary_color: '#4c1d95',
+          font: 'default',
+          header_style: 'left-aligned',
+          show_vehicle_details_block: true,
+          show_loan_summary: false,
+          footer_text: '',
+          computer_gen_subnote: 'E. & O. E.',
+        }),
+        JSON.stringify({
+          show_logo: true,
+          logo_asset: 'mvg_group',
+          show_signature: true,
+          signature_asset: 'rudra_proprietor',
+          signatory_title: 'Proprietor',
+          original_copy_label: 'ORIGINAL FOR RECIPIENT',
+          ship_to_same_as_billing: true,
+          show_bank_details: false,
+          bank_details: '',
+          show_terms: true,
+          terms_text:
+            '1) All subject to Madhya Pradesh jurisdiction.\n'
+            + '2) Goods once sold will not be taken back.\n'
+            + '3) E. & O. E.',
+          primary_color: '#1e3a5f',
+          font: 'default',
+          header_style: 'left-aligned',
+          show_vehicle_details_block: true,
+          show_loan_summary: false,
+          footer_text: '',
+          computer_gen_subnote: 'E. & O. E.',
+        }),
+      ],
     );
 
     // ── 2. Branches ───────────────────────────────────────
     const { rows: [mapusa] } = await client.query(
       `INSERT INTO branches (company_id, name, code, address, phone, city, state, pincode, state_code)
-       VALUES ($1, 'MVG Mapusa', 'MAP', 'Shop 5, Municipal Market Road, Mapusa, Goa 403507', '9876543211', 'Mapusa', 'Goa', '403507', '30')
+       VALUES ($1, 'MVG Delhi (Registered Office)', 'DEL',
+ '1st Floor, 102, 52A, V81, Capital Tree, Jain Uniform Street, Laxmi Nagar, New Delhi - 110092',
+               '626006629', 'New Delhi', 'Delhi', '110092', '07')
        RETURNING id`,
       [companyId],
     );
 
     const { rows: [panaji] } = await client.query(
       `INSERT INTO branches (company_id, name, code, address, phone, city, state, pincode, state_code)
-       VALUES ($1, 'MVG Panaji', 'PAN', '18th June Road, Near Old Secretariat, Panaji, Goa 403001', '9876543212', 'Panaji', 'Goa', '403001', '30')
+       VALUES ($1, 'MVG Satna (Sales)', 'STN',
+               'Word No 13 Kothi Main Road, Royani, Satna - 485666',
+               '9876543212', 'Satna', 'Madhya Pradesh', '485666', '23')
        RETURNING id`,
       [companyId],
     );

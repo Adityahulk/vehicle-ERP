@@ -32,6 +32,12 @@ const DEFAULT_LAYOUT = {
   show_loan_summary: false,
   footer_text: '',
   bank_details: '',
+  logo_asset: 'company_upload',
+  signature_asset: 'company_upload',
+  signatory_title: 'Authorised Signatory',
+  original_copy_label: 'ORIGINAL FOR RECIPIENT',
+  ship_to_same_as_billing: true,
+  computer_gen_subnote: 'E. & O. E.',
 };
 
 function mergeLayout(row) {
@@ -302,6 +308,16 @@ export default function InvoiceTemplates() {
                     )}
                     <Input type="file" accept=".png,.jpg,.jpeg,.svg" onChange={onLogoPick} disabled={logoMut.isPending} />
                     <p className="text-xs text-muted-foreground">PNG, JPG, or SVG — max 2MB</p>
+                    <div className="space-y-1.5 pt-1">
+                      <Label className="text-xs">Logo on invoice / PDF</Label>
+                      <Select
+                        value={layoutForm.logo_asset || 'company_upload'}
+                        onChange={(e) => setLayoutForm((p) => ({ ...p, logo_asset: e.target.value }))}
+                      >
+                        <option value="company_upload">Company upload (file above)</option>
+                        <option value="mvg_group">MVG group (same as website /assets/mvg-logo.png)</option>
+                      </Select>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label>Signature</Label>
@@ -310,6 +326,28 @@ export default function InvoiceTemplates() {
                     )}
                     <Input type="file" accept=".png,.jpg,.jpeg" onChange={onSigPick} disabled={sigMut.isPending} />
                     <p className="text-xs text-muted-foreground">PNG or JPG — max 1MB (transparent PNG recommended)</p>
+                    <div className="space-y-1.5 pt-1">
+                      <Label className="text-xs">Signature image source</Label>
+                      <Select
+                        value={layoutForm.signature_asset || 'company_upload'}
+                        onChange={(e) => setLayoutForm((p) => ({ ...p, signature_asset: e.target.value }))}
+                      >
+                        <option value="company_upload">Company upload (file above)</option>
+                        <option value="mavidya_director">Preset: Mavidya — Director (round stamp)</option>
+                        <option value="rudra_proprietor">Preset: Rudra Green Legender — Proprietor</option>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Presets use scanned signatories from your GST pack. Uploaded file is ignored when a preset is selected.
+                      </p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Signatory title (printed under signature)</Label>
+                      <Input
+                        value={layoutForm.signatory_title || ''}
+                        onChange={(e) => setLayoutForm((p) => ({ ...p, signatory_title: e.target.value }))}
+                        placeholder="Authorised Signatory"
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -341,6 +379,7 @@ export default function InvoiceTemplates() {
                     ['show_bank_details', 'Show bank details'],
                     ['show_terms', 'Show terms & conditions'],
                     ['show_loan_summary', 'Show loan summary'],
+                    ['ship_to_same_as_billing', 'Ship-to same as bill-to (trade layout)'],
                   ].map(([key, label]) => (
                     <label key={key} className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={!!layoutForm[key]} onChange={toggle(key)} />
@@ -382,6 +421,26 @@ export default function InvoiceTemplates() {
                     onChange={(e) => setLayoutForm((p) => ({ ...p, footer_text: e.target.value }))}
                   />
                 </div>
+                {editing?.template_key === 'trade' && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Copy label (top-right ribbon)</Label>
+                      <Input
+                        value={layoutForm.original_copy_label || ''}
+                        onChange={(e) => setLayoutForm((p) => ({ ...p, original_copy_label: e.target.value }))}
+                        placeholder="ORIGINAL FOR RECIPIENT"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Computer-generated note (footer)</Label>
+                      <Input
+                        value={layoutForm.computer_gen_subnote || ''}
+                        onChange={(e) => setLayoutForm((p) => ({ ...p, computer_gen_subnote: e.target.value }))}
+                        placeholder="E. & O. E."
+                      />
+                    </div>
+                  </>
+                )}
                 <div className="space-y-2">
                   <Label>Bank details</Label>
                   <Textarea

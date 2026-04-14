@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: __FONT_FAMILY__; color:#111; font-size:10px; padding:16px 20px; }
+  .ribbon { text-align:right; font-weight:700; font-size:11px; letter-spacing:0.06em; color:#333; margin-bottom:6px; }
+  .top-band { background:__PRIMARY_COLOR__; color:#fff; padding:8px 10px; font-weight:700; font-size:12px; text-align:center; margin-bottom:10px; }
+  .seller-block { margin-bottom:10px; }
+  .seller-name { font-size:14px; font-weight:700; color:#111; }
+  .seller-meta { margin-top:4px; line-height:1.45; }
+  .meta-grid { display:table; width:100%; border-collapse:collapse; margin:10px 0; font-size:10px; }
+  .meta-grid > div { display:table-row; }
+  .meta-grid > div > span { display:table-cell; padding:3px 6px; border:1px solid #cbd5e1; vertical-align:top; }
+  .meta-grid .lbl { background:#f1f5f9; font-weight:600; width:12%; white-space:nowrap; }
+  .party-row { display:flex; gap:10px; margin:10px 0; align-items:stretch; }
+  .party { flex:1; border:1px solid #94a3b8; padding:8px; background:#fafafa; }
+  .party h4 { font-size:8px; text-transform:uppercase; color:#64748b; margin-bottom:6px; letter-spacing:0.05em; }
+  table.items { width:100%; border-collapse:collapse; margin:10px 0; font-size:9px; }
+  table.items th, table.items td { border:1px solid #64748b; padding:4px 3px; vertical-align:top; }
+  table.items th { background:#e2e8f0; font-weight:600; text-align:center; }
+  table.items .num { text-align:right; font-variant-numeric:tabular-nums; }
+  table.items .center { text-align:center; }
+  .summary-row { display:flex; justify-content:flex-end; margin-top:8px; }
+  .summary-table { border-collapse:collapse; font-size:9px; min-width:420px; }
+  .summary-table th, .summary-table td { border:1px solid #64748b; padding:4px 6px; }
+  .summary-table th { background:#e2e8f0; }
+  .summary-table .num { text-align:right; }
+  .words { margin:10px 0; padding:8px; border:1px solid #cbd5e1; background:#f8fafc; font-size:10px; font-weight:600; }
+  .bottom { display:flex; gap:16px; margin-top:14px; align-items:flex-start; border-top:2px solid __PRIMARY_COLOR__; padding-top:12px; }
+  .terms-bank { flex:1; font-size:9px; line-height:1.4; color:#333; }
+  .sign-area { flex:0 0 220px; text-align:center; border:1px dashed #94a3b8; padding:8px; min-height:100px; }
+  .sign-area img { max-height:56px; max-width:100%; margin:4px auto; display:block; }
+  .receiver-line { margin-top:16px; font-size:9px; text-align:center; border-top:1px solid #111; padding-top:6px; }
+  .footer-note { text-align:center; font-size:8px; color:#64748b; margin-top:12px; }
+  .loan-box { margin:8px 0; padding:6px; background:#fffbeb; border:1px solid #fcd34d; font-size:9px; }
+</style>
+</head>
+<body>
+<div class="ribbon">__ORIGINAL_LABEL__</div>
+<div class="top-band">TAX INVOICE</div>
+
+<div class="seller-block">
+  __LOGO_BLOCK__
+  <div class="seller-name">__COMPANY_NAME__</div>
+  <div class="seller-meta">
+    __COMPANY_ADDRESS__<br/>
+    <strong>Phone:</strong> __COMPANY_PHONE__ &nbsp;|&nbsp; <strong>Email:</strong> __COMPANY_EMAIL__<br/>
+    <strong>GSTIN:</strong> __COMPANY_GSTIN__ &nbsp;|&nbsp; <strong>State:</strong> __COMPANY_STATE_CODE__ — __COMPANY_STATE_NAME__
+  </div>
+</div>
+
+<div class="meta-grid">
+  __META_ROWS__
+</div>
+
+<div class="party-row">
+  <div class="party">
+    <h4>Billing details (Bill To)</h4>
+    <p><strong>__CUSTOMER_NAME__</strong></p>
+    <p>__CUSTOMER_ADDRESS__</p>
+    <p>__CUSTOMER_PHONE__</p>
+    <p>__CUSTOMER_GSTIN_LINE__</p>
+    <p><strong>POS / State Code:</strong> __PLACE_OF_SUPPLY__</p>
+  </div>
+  <div class="party">
+    <h4>Shipping details (Ship To)</h4>
+    __SHIP_TO_BLOCK__
+  </div>
+</div>
+
+__LOAN_BLOCK__
+
+<table class="items">
+  <thead>
+    __ITEMS_HEAD__
+  </thead>
+  <tbody>
+    __ITEMS_BODY__
+  </tbody>
+</table>
+
+<div class="summary-row">
+  <table class="summary-table">
+    <thead>
+      <tr>
+        <th class="num">Taxable Amt</th>
+        <th class="num">CGST %</th>
+        <th class="num">CGST Amt</th>
+        <th class="num">SGST %</th>
+        <th class="num">SGST Amt</th>
+        <th class="num">IGST %</th>
+        <th class="num">IGST Amt</th>
+      </tr>
+    </thead>
+    <tbody>
+      __TAX_SUMMARY_ROW__
+    </tbody>
+  </table>
+</div>
+
+<div class="summary-row" style="margin-top:6px">
+  <table class="summary-table" style="min-width:280px">
+    __TOTALS_MINI__
+  </table>
+</div>
+
+<div class="words">Amount in words: __AMOUNT_WORDS__</div>
+
+__EINVOICE_BLOCK__
+
+<div class="bottom">
+  <div class="terms-bank">
+    __TERMS_BLOCK__
+    __BANK_BLOCK__
+    <p style="margin-top:8px;font-size:9px;font-weight:600;">__FOOTER_TEXT__</p>
+  </div>
+  <div>
+    <div class="sign-area">
+      <div style="font-size:9px;text-align:left;margin-bottom:4px;">For <strong>__COMPANY_NAME__</strong></div>
+      __SIGNATURE_IMG__
+      <div style="font-size:9px;font-weight:600;margin-top:6px;border-top:1px solid #111;padding-top:4px;">__SIGNATORY_TITLE__</div>
+    </div>
+    <div class="receiver-line"><strong>Receiver's signature &amp; seal</strong></div>
+  </div>
+</div>
+
+__QR_BLOCK__
+
+<div class="footer-note">This is a computer-generated invoice. __COMPUTER_GEN_NOTE__</div>
+</body>
+</html>

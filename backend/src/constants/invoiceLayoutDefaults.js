@@ -13,6 +13,14 @@ const DEFAULT_LAYOUT = {
   show_loan_summary: false,
   footer_text: '',
   bank_details: '',
+  /** company_upload | mvg_group — same file as website /assets/mvg-logo.png, bundled for PDFs */
+  logo_asset: 'company_upload',
+  /** company_upload | rudra_proprietor | mavidya_director — preset PNGs in assets/invoice-signatures */
+  signature_asset: 'company_upload',
+  signatory_title: 'Authorised Signatory',
+  original_copy_label: 'ORIGINAL FOR RECIPIENT',
+  ship_to_same_as_billing: true,
+  computer_gen_subnote: 'E. & O. E.',
 };
 
 module.exports = { DEFAULT_LAYOUT };

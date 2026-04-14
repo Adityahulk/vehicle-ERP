@@ -5,6 +5,36 @@ const { DEFAULT_LAYOUT } = require('../constants/invoiceLayoutDefaults');
 
 const TEMPLATE_DIR = path.join(__dirname, '..', 'templates', 'invoice-html');
 const UPLOADS_ROOT = path.join(__dirname, '..', '..', 'uploads');
+/** Repo: backend/assets/invoice-signatures (not under src/) */
+const PRESET_SIGN_DIR = path.join(__dirname, '..', '..', 'assets', 'invoice-signatures');
+const PRESET_LOGO_DIR = path.join(__dirname, '..', '..', 'assets', 'invoice-logos');
+
+/** Same branding as frontend public/assets/mvg-logo.png (copied into backend for server-side PDF). */
+const LOGO_PRESET_FILES = {
+  mvg_group: 'mvg-group.png',
+};
+
+/** Built-in signature scans (Rudra Green Legender — Proprietor; Mavidya — Director). */
+const SIGNATURE_PRESET_FILES = {
+  rudra_proprietor: 'rudra-green-legender-proprietor.png',
+  mavidya_director: 'mavidya-director.png',
+};
+
+const GST_STATE_NAMES = {
+  '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh', '05': 'Uttarakhand',
+  '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan', '09': 'Uttar Pradesh', '10': 'Bihar', '11': 'Sikkim',
+  '12': 'Arunachal Pradesh', '13': 'Nagaland', '14': 'Manipur', '15': 'Mizoram', '16': 'Tripura', '17': 'Meghalaya',
+  '18': 'Assam', '19': 'West Bengal', '20': 'Jharkhand', '21': 'Odisha', '22': 'Chhattisgarh', '23': 'Madhya Pradesh',
+  '24': 'Gujarat', '26': 'Dadra and Nagar Haveli and Daman and Diu', '27': 'Maharashtra', '29': 'Karnataka',
+  '30': 'Goa', '31': 'Lakshadweep', '32': 'Kerala', '33': 'Tamil Nadu', '34': 'Puducherry', '36': 'Telangana',
+  '37': 'Andhra Pradesh', '38': 'Ladakh',
+};
+
+function stateNameFromGstin(gstin) {
+  if (!gstin || String(gstin).length < 2) return '—';
+  const code = String(gstin).slice(0, 2);
+  return GST_STATE_NAMES[code] || `State code ${code}`;
+}
 
 function mergeLayout(templateRow) {
   const raw = templateRow?.layout_config;
@@ -57,17 +87,31 @@ function tryLegacyUploadUrl(url) {
   return fs.existsSync(normalized) ? normalized : null;
 }
 
+function resolveLogoDataUri(companyId, invoice, layout) {
+  if (!layout.show_logo) return '';
+  const asset = layout.logo_asset || 'company_upload';
+  if (asset !== 'company_upload' && LOGO_PRESET_FILES[asset]) {
+    const presetPath = path.join(PRESET_LOGO_DIR, LOGO_PRESET_FILES[asset]);
+    if (fs.existsSync(presetPath)) return fileToDataUri(presetPath);
+  }
+  const p = findCompanyAsset(companyId, 'logo') || tryLegacyUploadUrl(invoice.logo_url);
+  return p ? fileToDataUri(p) : '';
+}
+
+function resolveSignatureDataUri(companyId, invoice, layout) {
+  if (!layout.show_signature) return '';
+  const asset = layout.signature_asset || 'company_upload';
+  if (asset !== 'company_upload' && SIGNATURE_PRESET_FILES[asset]) {
+    const presetPath = path.join(PRESET_SIGN_DIR, SIGNATURE_PRESET_FILES[asset]);
+    if (fs.existsSync(presetPath)) return fileToDataUri(presetPath);
+  }
+  const p = findCompanyAsset(companyId, 'signature') || tryLegacyUploadUrl(invoice.signature_url);
+  return p ? fileToDataUri(p) : '';
+}
+
 function resolveLogoSignatureDataUri(companyId, invoice, layout) {
-  let logo = '';
-  let signature = '';
-  if (layout.show_logo) {
-    const p = findCompanyAsset(companyId, 'logo') || tryLegacyUploadUrl(invoice.logo_url);
-    logo = p ? fileToDataUri(p) : '';
-  }
-  if (layout.show_signature) {
-    const p = findCompanyAsset(companyId, 'signature') || tryLegacyUploadUrl(invoice.signature_url);
-    signature = p ? fileToDataUri(p) : '';
-  }
+  const logo = resolveLogoDataUri(companyId, invoice, layout);
+  const signature = resolveSignatureDataUri(companyId, invoice, layout);
   return { logo, signature };
 }
 
@@ -164,9 +208,169 @@ function buildHeaderHtml(inv, L, logoBlock) {
   return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:24px;width:100%">${left}${right}</div>`;
 }
 
+function buildTradeMetaRows(inv) {
+  const vehicleNo = esc(inv.rto_number || inv.chassis_number || '—');
+  const dest = esc(inv.branch_name || '—');
+  const payType = Number(inv.loan_amount) > 0 ? 'Credit' : '—';
+  const eway = esc(inv.eway_bill_no || '—');
+  return `
+  <div><span class="lbl">Invoice No.</span><span>${esc(inv.invoice_number)}</span><span class="lbl">Date</span><span>${formatDate(inv.invoice_date)}</span></div>
+  <div><span class="lbl">Vehicle No.</span><span>${vehicleNo}</span><span class="lbl">Destination</span><span>${dest}</span></div>
+  <div><span class="lbl">Payment</span><span>${payType}</span><span class="lbl">E-Way No.</span><span>${eway}</span></div>
+  <div><span class="lbl">Status</span><span>${esc(String(inv.status || '').toUpperCase())}</span><span class="lbl">Due</span><span>${formatDate(inv.loan_due_date || inv.invoice_date)}</span></div>`;
+}
+
+function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
+  const L = mergeLayout(templateRow);
+  const tplPath = path.join(TEMPLATE_DIR, 'template_trade.html');
+  let html = fs.readFileSync(tplPath, 'utf8');
+  const companyId = inv.company_id;
+  const { logo, signature } = resolveLogoSignatureDataUri(companyId, inv, L);
+  const hasIgst = items.some((i) => Number(i.igst_amount) > 0);
+  const font = L.font === 'serif' ? "Georgia, 'Times New Roman', serif" : "'Segoe UI', system-ui, sans-serif";
+  const logoBlock = logo
+    ? `<img src="${logo}" alt="Logo" style="max-height:64px;margin-bottom:8px;display:block;object-fit:contain;" />`
+    : '';
+
+  const coStateCode = inv.company_gstin ? String(inv.company_gstin).slice(0, 2) : '—';
+  const coStateName = stateNameFromGstin(inv.company_gstin);
+  const posLine = inv.customer_gstin
+    ? `${esc(String(inv.customer_gstin).slice(0, 2))} — ${esc(stateNameFromGstin(inv.customer_gstin))}`
+    : '—';
+
+  const shipInner = L.ship_to_same_as_billing !== false
+    ? `<p><strong>${esc(inv.customer_name)}</strong></p>
+       <p>${esc(inv.customer_address || '')}</p>
+       <p>${inv.customer_phone ? esc(`Phone: ${inv.customer_phone}`) : ''}</p>
+       <p>${inv.customer_gstin ? esc(`GSTIN: ${inv.customer_gstin}`) : ''}</p>
+       <p><strong>POS:</strong> ${posLine}</p>`
+    : `<p class="text-muted-foreground">Same as billing / see delivery note</p>`;
+
+  const itemsHead = hasIgst
+    ? '<tr><th>Sl</th><th>Item</th><th>HSN</th><th>Unit</th><th class="num">Qty</th><th class="num">Gross</th><th class="num">Taxable</th><th class="num">GST%</th><th class="num">IGST</th><th class="num">Amount</th></tr>'
+    : '<tr><th>Sl</th><th>Item</th><th>HSN</th><th>Unit</th><th class="num">Qty</th><th class="num">Gross</th><th class="num">Taxable</th><th class="num">GST%</th><th class="num">CGST</th><th class="num">SGST</th><th class="num">Amount</th></tr>';
+
+  const itemsBody = items.map((item, idx) => {
+    const gstRate = hasIgst ? Number(item.igst_rate) : Number(item.cgst_rate) + Number(item.sgst_rate);
+    const taxable = Number(item.amount) - Number(item.cgst_amount) - Number(item.sgst_amount) - Number(item.igst_amount);
+    const gross = Number(item.unit_price) * Number(item.quantity);
+    const taxCells = hasIgst
+      ? `<td class="num">&#8377;${formatPaise(item.igst_amount)}</td>`
+      : `<td class="num">&#8377;${formatPaise(item.cgst_amount)}</td><td class="num">&#8377;${formatPaise(item.sgst_amount)}</td>`;
+    return `<tr>
+      <td class="center">${idx + 1}</td>
+      <td>${esc(item.description)}</td>
+      <td class="center">${esc(item.hsn_code || '')}</td>
+      <td class="center">Pcs</td>
+      <td class="num">${item.quantity}</td>
+      <td class="num">&#8377;${formatPaise(gross)}</td>
+      <td class="num">&#8377;${formatPaise(taxable)}</td>
+      <td class="num">${gstRate}%</td>
+      ${taxCells}
+      <td class="num"><strong>&#8377;${formatPaise(item.amount)}</strong></td>
+    </tr>`;
+  }).join('');
+
+  const taxableTotal = Number(inv.subtotal) - Number(inv.discount);
+  const first = items[0] || {};
+  const cgstR = hasIgst ? 0 : (Number(first.cgst_rate) || 0);
+  const sgstR = hasIgst ? 0 : (Number(first.sgst_rate) || 0);
+  const igstR = hasIgst ? (Number(first.igst_rate) || 0) : 0;
+
+  const taxSummaryRow = `<tr>
+    <td class="num">&#8377;${formatPaise(taxableTotal)}</td>
+    <td class="num">${cgstR ? `${cgstR}%` : '0'}</td>
+    <td class="num">&#8377;${formatPaise(inv.cgst_amount)}</td>
+    <td class="num">${sgstR ? `${sgstR}%` : '0'}</td>
+    <td class="num">&#8377;${formatPaise(inv.sgst_amount)}</td>
+    <td class="num">${igstR ? `${igstR}%` : '0'}</td>
+    <td class="num">&#8377;${formatPaise(inv.igst_amount)}</td>
+  </tr>`;
+
+  const totalsMini = `
+    <tr><td>No. of items</td><td class="num">${items.length}</td></tr>
+    <tr><td>Discount</td><td class="num">&#8377;${formatPaise(inv.discount)}</td></tr>
+    <tr><td>Taxable amount</td><td class="num">&#8377;${formatPaise(taxableTotal)}</td></tr>
+    <tr><td><strong>Grand total</strong></td><td class="num"><strong>&#8377;${formatPaise(inv.total)}</strong></td></tr>`;
+
+  const termsBlock = L.show_terms && L.terms_text
+    ? `<div><strong>Terms &amp; conditions</strong></div><div style="white-space:pre-wrap;margin-top:4px">${esc(L.terms_text).replace(/\n/g, '<br/>')}</div>`
+    : '';
+
+  const bankBlock = L.show_bank_details && L.bank_details
+    ? `<div style="margin-top:10px"><strong>Bank details</strong></div><div style="white-space:pre-wrap;margin-top:4px">${esc(L.bank_details).replace(/\n/g, '<br/>')}</div>`
+    : '';
+
+  const signImg = signature
+    ? `<img src="${signature}" alt="Signature" />`
+    : '<div style="min-height:40px"></div>';
+
+  const einvoiceBlock = inv.irn
+    ? `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:10px 14px;margin-bottom:12px;">
+        <p style="font-size:9px;color:#16a34a;font-weight:600;">E-INVOICE (IRN)</p>
+        <p style="font-size:10px;font-family:monospace;word-break:break-all;">${esc(inv.irn)}</p>
+        ${inv.signed_qr && L.show_qr_code ? `<img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(inv.signed_qr)}" style="width:90px;height:90px;margin-top:6px" />` : ''}
+       </div>`
+    : '';
+
+  const qrBlock = !inv.irn && L.show_qr_code
+    ? '<div style="margin-top:12px;text-align:center;color:#94a3b8;font-size:9px;">QR placeholder</div>'
+    : '';
+
+  const loanBlock = L.show_loan_summary && inv.loan_amount != null && Number(inv.loan_amount) > 0
+    ? `<div class="loan-box"><strong>Loan summary</strong><br/>
+        Bank: ${esc(inv.loan_bank_name || '—')}<br/>
+        Amount: ₹${formatPaise(inv.loan_amount)} · EMI: ₹${formatPaise(inv.loan_emi_amount || 0)} · Tenure: ${esc(inv.loan_tenure_months || '—')} months
+       </div>`
+    : '';
+
+  const map = {
+    PRIMARY_COLOR: esc(L.primary_color || '#4c1d95'),
+    FONT_FAMILY: font,
+    ORIGINAL_LABEL: esc(L.original_copy_label || 'ORIGINAL FOR RECIPIENT'),
+    LOGO_BLOCK: logoBlock,
+    COMPANY_NAME: esc(inv.company_name),
+    COMPANY_ADDRESS: esc(inv.company_address || '').replace(/\n/g, '<br/>'),
+    COMPANY_PHONE: esc(inv.company_phone || '—'),
+    COMPANY_EMAIL: esc(inv.company_email || '—'),
+    COMPANY_GSTIN: esc(inv.company_gstin || '—'),
+    COMPANY_STATE_CODE: esc(coStateCode),
+    COMPANY_STATE_NAME: esc(coStateName),
+    META_ROWS: buildTradeMetaRows(inv),
+    CUSTOMER_NAME: esc(inv.customer_name),
+    CUSTOMER_ADDRESS: esc(inv.customer_address || '').replace(/\n/g, '<br/>'),
+    CUSTOMER_PHONE: inv.customer_phone ? esc(`Phone: ${inv.customer_phone}`) : '',
+    CUSTOMER_GSTIN_LINE: inv.customer_gstin ? esc(`GSTIN: ${inv.customer_gstin}`) : '',
+    PLACE_OF_SUPPLY: posLine,
+    SHIP_TO_BLOCK: shipInner,
+    LOAN_BLOCK: loanBlock,
+    ITEMS_HEAD: itemsHead,
+    ITEMS_BODY: itemsBody,
+    TAX_SUMMARY_ROW: taxSummaryRow,
+    TOTALS_MINI: totalsMini,
+    AMOUNT_WORDS: esc(amountInWordsFromPaise(inv.total)),
+    TERMS_BLOCK: termsBlock,
+    BANK_BLOCK: bankBlock,
+    FOOTER_TEXT: esc(L.footer_text || ''),
+    SIGNATURE_IMG: signImg,
+    SIGNATORY_TITLE: esc(L.signatory_title || 'Authorised Signatory'),
+    EINVOICE_BLOCK: einvoiceBlock,
+    QR_BLOCK: qrBlock,
+    COMPUTER_GEN_NOTE: esc(L.computer_gen_subnote || ''),
+  };
+
+  for (const [k, v] of Object.entries(map)) {
+    html = html.split(`__${k}__`).join(v);
+  }
+  return html;
+}
+
 function buildStandardInvoiceHtml({ invoice: inv, items }, templateRow) {
   const L = mergeLayout(templateRow);
-  const key = templateRow?.template_key === 'simple' ? 'simple' : 'standard';
+  const key = templateRow?.template_key === 'simple' ? 'simple' : templateRow?.template_key === 'trade' ? 'trade' : 'standard';
+  if (key === 'trade') {
+    return buildTradeInvoiceHtml({ invoice: inv, items }, templateRow);
+  }
   const tplPath = path.join(TEMPLATE_DIR, key === 'simple' ? 'template_simple.html' : 'template_standard.html');
   let html = fs.readFileSync(tplPath, 'utf8');
 
@@ -258,15 +462,16 @@ function buildStandardInvoiceHtml({ invoice: inv, items }, templateRow) {
     ? `<div class="terms" style="margin-top:10px"><strong>Bank details</strong><br/>${esc(L.bank_details).replace(/\n/g, '<br/>')}</div>`
     : '';
 
+  const signTitle = esc(L.signatory_title || 'Authorised Signatory');
   const signBlock = L.show_signature
     ? `<p style="font-size:10px">For <strong>${esc(inv.company_name)}</strong></p>
        <div style="min-height:36px">${signature ? `<img src="${signature}" alt="Signature" />` : ''}</div>
-       <p style="font-size:10px;border-top:1px solid #333;padding-top:4px">Authorised Signatory</p>`
-    : `<p style="font-size:10px">For <strong>${esc(inv.company_name)}</strong></p><p style="font-size:10px">Authorised Signatory</p>`;
+       <p style="font-size:10px;border-top:1px solid #333;padding-top:4px">${signTitle}</p>`
+    : `<p style="font-size:10px">For <strong>${esc(inv.company_name)}</strong></p><p style="font-size:10px">${signTitle}</p>`;
 
   const signSimple = L.show_signature
-    ? `<div>For ${esc(inv.company_name)}</div>${signature ? `<img src="${signature}" alt="sig" />` : '<div style="height:36px"></div>'}<div>Authorised Signatory</div>`
-    : `<div>For ${esc(inv.company_name)}</div><div>Authorised Signatory</div>`;
+    ? `<div>For ${esc(inv.company_name)}</div>${signature ? `<img src="${signature}" alt="sig" />` : '<div style="height:36px"></div>'}<div>${signTitle}</div>`
+    : `<div>For ${esc(inv.company_name)}</div><div>${signTitle}</div>`;
 
   const einvoiceBlock = inv.irn
     ? `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:10px 14px;margin-bottom:12px;">
@@ -331,33 +536,36 @@ function buildStandardInvoiceHtml({ invoice: inv, items }, templateRow) {
 function buildDummyInvoiceData() {
   const invoice = {
     company_id: '00000000-0000-0000-0000-000000000000',
-    invoice_number: 'INV-2025-DEMO-0001',
+    invoice_number: 'MVG/25-26/102',
     invoice_date: new Date().toISOString().split('T')[0],
     status: 'confirmed',
-    subtotal: 50000000,
+    subtotal: 45193810,
     discount: 0,
-    cgst_amount: 7000000,
-    sgst_amount: 7000000,
-    igst_amount: 0,
-    total: 64000000,
+    cgst_amount: 0,
+    sgst_amount: 0,
+    igst_amount: 2259690,
+    total: 47453500,
     notes: 'Sample invoice for template preview.',
-    company_name: 'Demo Motors Pvt Ltd',
-    company_gstin: '27AABCD1234E1Z5',
-    company_address: 'Plot 1, Industrial Estate, Goa 403001',
-    company_phone: '9876543210',
-    company_email: 'accounts@demo.com',
+    company_name: 'MAVIDYA MVG PRADEEP GURU SYSTEM PRIVATE LIMITED',
+    company_gstin: '07AASCM8531F1Z4',
+    company_address: '1st Floor, 102, 52A, V81, Capital Tree, Jain Uniform Street, Nattu Sweets, Laxmi Nagar, Vijay Block, New Delhi - 110092',
+    company_phone: '626006629',
+    company_email: 'accounts@mavidya.com',
     logo_url: null,
     signature_url: null,
-    customer_name: 'Sample Customer',
-    customer_address: '21, Sample Street, Mapusa',
-    customer_phone: '9123456789',
-    customer_gstin: '27AAAAA0000A1Z5',
-    chassis_number: 'MA3XXXXDEMO00001',
-    engine_number: 'K12DEMO0001',
-    vehicle_make: 'Maruti Suzuki',
-    vehicle_model: 'Swift',
-    vehicle_variant: 'VXi',
-    vehicle_color: 'Pearl White',
+    customer_name: 'NAMO ENTERPRISES',
+    customer_address: 'Word No 13 Kothi Main Road Royani Satna, Kothi Main Road Kothi, Satna - 485666',
+    customer_phone: '7222988681',
+    customer_gstin: '23DKJPP6431G1Z4',
+    chassis_number: 'CHASSIS-DEMO-001',
+    engine_number: 'ENG-DEMO-001',
+    rto_number: 'MH40CT6648',
+    eway_bill_no: '771550039887',
+    branch_name: 'Satna',
+    vehicle_make: 'Goods',
+    vehicle_model: 'Vehicle line items',
+    vehicle_variant: '',
+    vehicle_color: '—',
     vehicle_year: 2025,
     irn: null,
     signed_qr: null,
@@ -367,19 +575,47 @@ function buildDummyInvoiceData() {
     loan_tenure_months: null,
     loan_due_date: null,
   };
-  const items = [{
-    description: 'Maruti Swift VXi — New vehicle',
-    hsn_code: '8703',
-    quantity: 1,
-    unit_price: 50000000,
-    cgst_rate: 14,
-    sgst_rate: 14,
-    igst_rate: 0,
-    cgst_amount: 7000000,
-    sgst_amount: 7000000,
-    igst_amount: 0,
-    amount: 64000000,
-  }];
+  const items = [
+    {
+      description: 'SCHOOL VAN -1',
+      hsn_code: '87031090',
+      quantity: 1,
+      unit_price: 16333333,
+      cgst_rate: 0,
+      sgst_rate: 0,
+      igst_rate: 5,
+      cgst_amount: 0,
+      sgst_amount: 0,
+      igst_amount: 816667,
+      amount: 17150000,
+    },
+    {
+      description: 'E- RIKSHSAW MS',
+      hsn_code: '87039010',
+      quantity: 1,
+      unit_price: 14349048,
+      cgst_rate: 0,
+      sgst_rate: 0,
+      igst_rate: 5,
+      cgst_amount: 0,
+      sgst_amount: 0,
+      igst_amount: 717452,
+      amount: 15066500,
+    },
+    {
+      description: 'LOADER 4X6',
+      hsn_code: '87039010',
+      quantity: 1,
+      unit_price: 14511429,
+      cgst_rate: 0,
+      sgst_rate: 0,
+      igst_rate: 5,
+      cgst_amount: 0,
+      sgst_amount: 0,
+      igst_amount: 725571,
+      amount: 15237000,
+    },
+  ];
   return { invoice, items };
 }
 
@@ -395,4 +631,8 @@ module.exports = {
   fileToDataUri,
   tryLegacyUploadUrl,
   esc,
+  resolveLogoDataUri,
+  resolveSignatureDataUri,
+  LOGO_PRESET_FILES,
+  SIGNATURE_PRESET_FILES,
 };

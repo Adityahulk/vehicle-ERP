@@ -57,6 +57,22 @@ router.get('/preview-template', requireMinRole('company_admin'), async (req, res
     const row = await fetchInvoiceTemplateRow(company_id, req.query.templateId || undefined);
     const data = buildDummyInvoiceData();
     data.invoice.company_id = company_id;
+    const { rows: coRows } = await query(
+      `SELECT name, gstin, address, phone, email, logo_url, signature_url FROM companies WHERE id = $1 AND is_deleted = FALSE`,
+      [company_id],
+    );
+    if (coRows[0]) {
+      const c = coRows[0];
+      Object.assign(data.invoice, {
+        company_name: c.name,
+        company_gstin: c.gstin,
+        company_address: c.address,
+        company_phone: c.phone,
+        company_email: c.email,
+        logo_url: c.logo_url,
+        signature_url: c.signature_url,
+      });
+    }
     const html = buildStandardInvoiceHtml(data, row);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
