@@ -268,9 +268,9 @@ cd /home/deploy/vehicle-erp
 | `TWILIO_WHATSAPP_FROM` | No | — | Twilio WhatsApp sender number |
 | `TWO_FACTOR_API_KEY` | No | — | 2Factor.in API key for SMS |
 | `MASTERS_INDIA_ENV` | No | `sandbox` | `sandbox` or `production` (API host for e-invoice / e-way) |
-| `MASTERS_INDIA_API_KEY` | No* | — | Masters India API key (sent as `Authorization: JWT <key>` on API calls). *Required if not using username/password |
-| `MASTERS_INDIA_API_AUTH_MODE` | No | `authorization_jwt` | `authorization_jwt` (default), `both`, or `api_key_only` (IRN usually needs JWT) |
-| `MASTERS_INDIA_USERNAME` | No* | — | Portal username for `POST /api/v1/token-auth/`. *Required with password if no API key |
+| `MASTERS_INDIA_API_KEY` | No* | — | Profile API key (`api_key` header). Opaque keys are not JWTs — pair with username/password so the app can obtain `Authorization: JWT`. *Required if not using username/password |
+| `MASTERS_INDIA_API_AUTH_MODE` | No | `authorization_jwt` | Only applies to JWT-shaped keys: `authorization_jwt`, `both`, or `api_key_only` |
+| `MASTERS_INDIA_USERNAME` | No* | — | Portal username for `POST /api/v1/token-auth/`. *With opaque API key, both are required for IRN |
 | `MASTERS_INDIA_PASSWORD` | No* | — | Portal password (pair with `MASTERS_INDIA_USERNAME`) |
 
 ### E-Invoice & E-Way Bill (Masters India)
@@ -283,7 +283,7 @@ Optional. When **either** an API key **or** username + password is set, branch m
 | Production (`MASTERS_INDIA_ENV=production`) | `https://router.mastersindia.co` |
 
 - Full API reference: [Masters India e-Invoicing](https://docs.mastersindia.co/einvoicing)
-- Auth modes: [Authentication](https://docs.mastersindia.co/einvoicing/authentication) (API key uses the same `Authorization: JWT …` scheme as the login token; optional `MASTERS_INDIA_API_AUTH_MODE` for edge cases)
+- Auth: [Authentication](https://docs.mastersindia.co/einvoicing/authentication). Opaque profile API keys use the `api_key` header; the access token from [token-auth](https://docs.mastersindia.co/einvoicing/authentication/access-tokens) goes in `Authorization: JWT …`. Set **API key + username + password** unless your key is already a three-part JWT.
 
 The app exposes **`GET /api/invoices/einvoice/status`** (authenticated) returning `{ enabled, environment }` so the UI can show whether integration is configured.
 

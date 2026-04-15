@@ -2,9 +2,11 @@
  * Masters India E-Invoice (IRN) & E-Way Bill REST integration
  * Docs: https://docs.mastersindia.co/einvoicing
  *
- * Auth: API key from UI is sent as `Authorization: JWT <key>` (same scheme as token-auth).
- * Optional: `MASTERS_INDIA_API_AUTH_MODE=api_key_only` to send only the `api_key` header (usually not accepted on IRN).
- * Or username/password → POST /api/v1/token-auth/ then `Authorization: JWT <token>`.
+ * Auth (see getAuthHeaders):
+ * - UI "API key" is often an opaque string → header `api_key` only; it is NOT valid after `JWT ` (causes "Not enough segments").
+ * - If the key has three dot-separated parts it is treated as a JWT → `Authorization: JWT <key>`.
+ * - Opaque key + username/password → `api_key` + `Authorization: JWT <token from token-auth>`.
+ * - Username/password only → token-auth then `Authorization: JWT <token>`.
  */
 
 const SANDBOX_API_BASE = 'https://sandb-api.mastersindia.co';
@@ -24,9 +26,8 @@ function getConfig() {
     password: (process.env.MASTERS_INDIA_PASSWORD || '').trim(),
     apiKey: (process.env.MASTERS_INDIA_API_KEY || '').trim(),
     /**
-     * authorization_jwt (default): Authorization: JWT <API key> — required for IRN; plain api_key header alone returns "access token was not found".
-     * api_key_only: only api_key header (legacy / rare).
-     * both: JWT + api_key header.
+     * For JWT-shaped API keys only: authorization_jwt | both (adds api_key header too).
+     * api_key_only: never send Authorization (opaque key only — IRN may reject).
      */
     apiAuthMode: (process.env.MASTERS_INDIA_API_AUTH_MODE || 'authorization_jwt').toLowerCase(),
     isProduction,
@@ -97,13 +98,23 @@ function isMastersSuccess(data) {
   return data?.results?.status === 'Success' && Number(data?.results?.code) === 200;
 }
 
-async function getAuthToken() {
-  const config = getConfig();
-  const now = Date.now();
+/** True if value looks like a JWT (header.payload.signature). Opaque API keys from Masters UI usually are not. */
+function looksLikeJwt(value) {
+  if (!value || typeof value !== 'string') return false;
+  const parts = value.split('.');
+  return parts.length === 3 && parts.every((p) => p.length > 0);
+}
 
-  if (config.apiKey) {
-    throw new Error('getAuthToken should not be called when api_key auth is configured');
+/**
+ * Login token from POST /api/v1/token-auth/ (cached). Call only when username/password are set.
+ */
+async function obtainAccessTokenFromLogin() {
+  const config = getConfig();
+  if (!config.username || !config.password) {
+    throw new Error('Masters India token-auth requires MASTERS_INDIA_USERNAME and MASTERS_INDIA_PASSWORD');
   }
+
+  const now = Date.now();
 
   if (tokenCache.token && tokenCache.expiry > now + 1200000) {
     return tokenCache.token;
@@ -172,18 +183,33 @@ async function getAuthHeaders() {
     'Content-Type': 'application/json',
     Accept: 'application/json',
   };
-  if (config.apiKey) {
-    const mode = config.apiAuthMode;
-    if (mode === 'api_key_only') {
-      return { ...base, api_key: config.apiKey };
-    }
-    const auth = { ...base, Authorization: `JWT ${config.apiKey}` };
-    if (mode === 'both') {
-      auth.api_key = config.apiKey;
-    }
-    return auth;
+  const mode = config.apiAuthMode;
+
+  if (mode === 'api_key_only' && config.apiKey) {
+    return { ...base, api_key: config.apiKey };
   }
-  const token = await getAuthToken();
+
+  if (config.apiKey && looksLikeJwt(config.apiKey)) {
+    const headers = { ...base, Authorization: `JWT ${config.apiKey}` };
+    if (mode === 'both') {
+      headers.api_key = config.apiKey;
+    }
+    return headers;
+  }
+
+  if (config.apiKey && !looksLikeJwt(config.apiKey)) {
+    if (config.username && config.password) {
+      const token = await obtainAccessTokenFromLogin();
+      return {
+        ...base,
+        api_key: config.apiKey,
+        Authorization: `JWT ${token}`,
+      };
+    }
+    return { ...base, api_key: config.apiKey };
+  }
+
+  const token = await obtainAccessTokenFromLogin();
   return { ...base, Authorization: `JWT ${token}` };
 }
 
