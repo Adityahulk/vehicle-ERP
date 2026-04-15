@@ -184,6 +184,11 @@ JWT_SECRET=generate-a-64-char-random-string
 JWT_ACCESS_EXPIRY=15m
 JWT_REFRESH_EXPIRY=7d
 CORS_ORIGIN=https://erp.yourdomain.com
+
+# Optional — Masters India e-invoice / e-way (see Environment Variables Reference)
+# MASTERS_INDIA_ENV=production
+# MASTERS_INDIA_API_KEY=...
+# Or: MASTERS_INDIA_USERNAME=... and MASTERS_INDIA_PASSWORD=...
 ```
 
 Generate a secure JWT secret:
@@ -262,6 +267,24 @@ cd /home/deploy/vehicle-erp
 | `TWILIO_AUTH_TOKEN` | No | — | Twilio auth token |
 | `TWILIO_WHATSAPP_FROM` | No | — | Twilio WhatsApp sender number |
 | `TWO_FACTOR_API_KEY` | No | — | 2Factor.in API key for SMS |
+| `MASTERS_INDIA_ENV` | No | `sandbox` | `sandbox` or `production` (API host for e-invoice / e-way) |
+| `MASTERS_INDIA_API_KEY` | No* | — | Masters India API key (`api_key` header). *Required if not using username/password |
+| `MASTERS_INDIA_USERNAME` | No* | — | Portal username for `POST /api/v1/token-auth/`. *Required with password if no API key |
+| `MASTERS_INDIA_PASSWORD` | No* | — | Portal password (pair with `MASTERS_INDIA_USERNAME`) |
+
+### E-Invoice & E-Way Bill (Masters India)
+
+Optional. When **either** an API key **or** username + password is set, branch managers can generate an **IRN** (e-invoice) and **e-way bill** for **confirmed** sales invoices. The seller **GSTIN** and company details come from the **company** profile (`companies.gstin`, name, address), not from these env vars.
+
+| Environment | API base (used by the backend) |
+|-------------|--------------------------------|
+| Sandbox (`MASTERS_INDIA_ENV=sandbox`) | `https://sandb-api.mastersindia.co` |
+| Production (`MASTERS_INDIA_ENV=production`) | `https://router.mastersindia.co` |
+
+- Full API reference: [Masters India e-Invoicing](https://docs.mastersindia.co/einvoicing)
+- Auth modes: [Authentication](https://docs.mastersindia.co/einvoicing/authentication) (`api_key` header or JWT after token-auth)
+
+The app exposes **`GET /api/invoices/einvoice/status`** (authenticated) returning `{ enabled, environment }` so the UI can show whether integration is configured.
 
 ---
 
@@ -280,7 +303,7 @@ vehicle-erp/
 │   │   ├── jobs/           # BullMQ job definitions
 │   │   ├── middleware/      # auth, role, validate
 │   │   ├── routes/         # Express routers
-│   │   ├── services/       # Business logic (GST, PDF, notifications)
+│   │   ├── services/       # Business logic (GST, PDF, Masters India e-invoice, notifications)
 │   │   ├── index.js        # Express server entry point
 │   │   └── worker.js       # Standalone BullMQ worker entry point
 │   ├── uploads/            # File uploads (logos, signatures)
