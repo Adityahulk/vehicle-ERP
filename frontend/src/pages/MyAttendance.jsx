@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import api from '@/lib/api';
+import useAuthStore from '@/store/authStore';
 import { formatDate, cn, istYmd } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
@@ -63,6 +64,23 @@ function useNowTick(active) {
 }
 
 function ClockSection() {
+  const role = useAuthStore((s) => s.user?.role);
+  const isCompanyAdmin = role === 'company_admin' || role === 'super_admin';
+
+  if (isCompanyAdmin) {
+    return (
+      <Card>
+        <CardContent className="pt-6 pb-6 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground mb-1">No personal clock-in</p>
+          <p>
+            Company administrators are not expected to clock in or out. Use{' '}
+            <strong>Team attendance</strong> to review and manage staff time.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['my-attendance-today'],
@@ -502,12 +520,17 @@ function LeavesTab() {
 }
 
 export default function MyAttendance() {
+  const role = useAuthStore((s) => s.user?.role);
+  const isCompanyAdmin = role === 'company_admin' || role === 'super_admin';
+
   return (
     <AppLayout>
       <div className="mb-6 max-w-3xl">
         <h2 className="text-2xl font-semibold">Attendance</h2>
         <p className="text-sm text-muted-foreground">
-          Clock in/out, view your month, and manage leave. Admins review everyone under Team attendance.
+          {isCompanyAdmin
+            ? 'View your month and manage leave. Personal clock-in/out is not used for company admins — use Team attendance for staff.'
+            : 'Clock in/out, view your month, and manage leave. Admins review everyone under Team attendance.'}
         </p>
       </div>
 

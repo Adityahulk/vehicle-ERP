@@ -2,8 +2,17 @@ const { query } = require('../config/db');
 const { istYmd, pgDateToYmd } = require('../lib/istDate');
 const { workingDatesInRange } = require('./attendanceLeaveController');
 
+function isCompanyWideAdminRole(role) {
+  return role === 'company_admin' || role === 'super_admin';
+}
+
 async function clockIn(req, res) {
   try {
+    if (isCompanyWideAdminRole(req.user.role)) {
+      return res.status(403).json({
+        error: 'Company administrators do not use personal clock-in. Use Team attendance for staff records.',
+      });
+    }
     const { id: user_id, company_id, branch_id } = req.user;
     const today = istYmd();
 
@@ -64,6 +73,11 @@ async function clockIn(req, res) {
 
 async function clockOut(req, res) {
   try {
+    if (isCompanyWideAdminRole(req.user.role)) {
+      return res.status(403).json({
+        error: 'Company administrators do not use personal clock-out. Use Team attendance for staff records.',
+      });
+    }
     const { id: user_id, company_id } = req.user;
     const today = istYmd();
 

@@ -4,6 +4,7 @@ import {
   ShoppingCart, PackagePlus, PieChart, BarChart2,
   Users,
   UserCircle,
+  CalendarDays,
 } from 'lucide-react';
 
 const ICON_MAP = {
@@ -20,6 +21,7 @@ const ICON_MAP = {
   PieChart,
   Users,
   UserCircle,
+  CalendarDays,
 };
 
 /** Role → primary navigation (paths and icon keys). */
@@ -33,7 +35,7 @@ export const NAV_CONFIG = {
     { label: 'Loans', path: '/loans', icon: 'Landmark' },
     { label: 'Expenses', path: '/expenses', icon: 'Receipt' },
     { label: 'Reports', path: '/reports', icon: 'BarChart2' },
-    { label: 'My clock', path: '/my-attendance', icon: 'Clock' },
+    { label: 'My leave', path: '/my-attendance', icon: 'CalendarDays' },
     { label: 'Team attendance', path: '/attendance', icon: 'Users' },
     { label: 'Settings', path: '/settings', icon: 'Settings' },
   ],
