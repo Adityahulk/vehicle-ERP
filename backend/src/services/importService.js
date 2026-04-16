@@ -21,7 +21,8 @@ function parseUploadedFile(filePath, mimeType) {
   const isJson = mimeType?.includes('json') || ext === '.json';
 
   if (isXlsx || (!isCsv && !isJson && (ext === '.xlsx' || ext === '.xls'))) {
-    const wb = XLSX.readFile(filePath);
+    // cellDates: real Date objects for date-formatted cells (else Excel gives serial numbers only).
+    const wb = XLSX.readFile(filePath, { cellDates: true });
     const sheetName = wb.SheetNames[0];
     const sheet = wb.Sheets[sheetName];
     const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
@@ -74,19 +75,79 @@ function parseUploadedFile(filePath, mimeType) {
   throw new Error('Unsupported file type');
 }
 
-function parseDdMmYyyy(s) {
-  if (s == null || s === '') return null;
-  if (s instanceof Date && !Number.isNaN(s.getTime())) {
-    return s.toISOString().split('T')[0];
+/**
+ * Excel / sheet import dates arrive as:
+ * - number: OLE automation date serial (days since 1899-12-30 UTC, same as SheetJS with 25569 = 1970-01-01)
+ * - Date: when workbook is read with cellDates: true
+ * - string: DD/MM/YYYY (template), DD-MM-YYYY, or YYYY-MM-DD
+ * Using toISOString() for local Dates would shift the calendar day in non-UTC zones.
+ */
+function parseImportDate(value) {
+  if (value == null || value === '') return null;
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const y = value.getFullYear();
+    const mo = value.getMonth() + 1;
+    const d = value.getDate();
+    return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   }
-  const str = String(s).trim();
-  const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!m) return null;
-  const d = parseInt(m[1], 10);
-  const mo = parseInt(m[2], 10);
-  const y = parseInt(m[3], 10);
-  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
-  return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const whole = Math.floor(value);
+    if (whole < 1 || whole > 2958465) return null;
+    const ms = (whole - 25569) * 86400 * 1000;
+    const dt = new Date(ms);
+    if (Number.isNaN(dt.getTime())) return null;
+    const y = dt.getUTCFullYear();
+    if (y < 1950 || y > 2150) return null;
+    return `${y}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+  }
+
+  const str = String(value).trim();
+  if (!str) return null;
+
+  // CSV export of Excel sometimes leaves a plain serial string (e.g. "45752")
+  if (/^\d{1,6}(\.\d+)?$/.test(str)) {
+    const n = parseFloat(str);
+    if (Number.isFinite(n)) {
+      const fromSerial = parseImportDate(n);
+      if (fromSerial) return fromSerial;
+    }
+  }
+
+  let m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) {
+    const d = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10);
+    const y = parseInt(m[3], 10);
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+
+  m = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (m) {
+    const d = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10);
+    const y = parseInt(m[3], 10);
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+
+  m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    const y = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10);
+    const d = parseInt(m[3], 10);
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+
+  return null;
+}
+
+/** @deprecated Use parseImportDate; kept for callers that expect the old name */
+function parseDdMmYyyy(s) {
+  return parseImportDate(s);
 }
 
 /** Template amounts are in rupees → paise */
@@ -304,6 +365,7 @@ module.exports = {
   validateSaleImportRow,
   validatePurchaseImportRow,
   buildTemplateSheet,
+  parseImportDate,
   parseDdMmYyyy,
   rupeesCellToPaise,
 };
