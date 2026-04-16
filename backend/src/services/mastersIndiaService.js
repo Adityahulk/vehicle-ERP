@@ -32,10 +32,17 @@ function getConfig() {
      */
     apiAuthMode: (process.env.MASTERS_INDIA_API_AUTH_MODE || 'authorization_jwt').toLowerCase(),
     /**
-     * When only MASTERS_INDIA_API_KEY is set (opaque, not JWT). Default api_key_only per Masters docs.
-     * bearer_and_api_key | bearer_only | token_only | raw_authorization — only if api_key-only fails (gateway quirk).
+     * When only MASTERS_INDIA_API_KEY is set (opaque, not JWT).
+     * Sandbox often still requires an Authorization bearer/JWT; api_key_only then fails with "access token was not found".
+     * bearer_and_api_key (default in docker-compose): api_key + Authorization: Bearer <same key> — works for some tenants.
+     * For most sandboxes you need MASTERS_INDIA_USERNAME + PASSWORD so we send JWT from token-auth + api_key.
      */
-    opaqueAuth: (process.env.MASTERS_INDIA_OPAQUE_AUTH || 'api_key_only').toLowerCase(),
+    opaqueAuth: (process.env.MASTERS_INDIA_OPAQUE_AUTH || 'bearer_and_api_key').toLowerCase(),
+    /**
+     * How to send the login access token from token-auth: jwt → "JWT <token>", bearer → "Bearer <token>".
+     * Try bearer if sandbox returns OAuth-style errors with JWT prefix.
+     */
+    tokenAuthorizationScheme: (process.env.MASTERS_INDIA_TOKEN_SCHEME || 'jwt').toLowerCase(),
     isProduction,
   };
 }
@@ -111,6 +118,27 @@ function looksLikeJwt(value) {
   return parts.length === 3 && parts.every((p) => p.length > 0);
 }
 
+function extractLoginToken(data) {
+  if (!data || typeof data !== 'object') return null;
+  const msg = data.results?.message;
+  const nestedToken = msg && typeof msg === 'object' && typeof msg.token === 'string' ? msg.token : null;
+  const t = data.token
+    || data.access_token
+    || (typeof data.access === 'string' ? data.access : null)
+    || data.results?.token
+    || data.results?.access_token
+    || nestedToken;
+  return typeof t === 'string' && t.trim() ? t.trim() : null;
+}
+
+function authorizationFromAccessToken(rawToken) {
+  const scheme = getConfig().tokenAuthorizationScheme;
+  if (scheme === 'bearer') {
+    return `Bearer ${rawToken}`;
+  }
+  return `JWT ${rawToken}`;
+}
+
 /**
  * Login token from POST /api/v1/token-auth/ (cached). Call only when username/password are set.
  */
@@ -139,9 +167,14 @@ async function obtainAccessTokenFromLogin() {
     console.warn('Redis cache read failed (mastersIndiaService):', err.message);
   }
 
+  const loginHeaders = { 'Content-Type': 'application/json', Accept: 'application/json' };
+  if (config.apiKey) {
+    loginHeaders.api_key = config.apiKey;
+  }
+
   const response = await fetch(`${config.apiBaseUrl}/api/v1/token-auth/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: loginHeaders,
     body: JSON.stringify({
       username: config.username,
       password: config.password,
@@ -162,9 +195,12 @@ async function obtainAccessTokenFromLogin() {
     throw new Error(parseMastersError(data) || `Login failed (${response.status})`);
   }
 
-  const token = data.token || data.results?.token || data.results?.message?.token;
+  const token = extractLoginToken(data);
   if (!token) {
-    throw new Error('Masters India login did not return a token');
+    const keys = data && typeof data === 'object' ? Object.keys(data).join(', ') : '';
+    throw new Error(
+      `Masters India login did not return a token (expected token or access_token). Response keys: ${keys || 'none'}`,
+    );
   }
 
   const expiry = now + 23 * 60 * 60 * 1000;
@@ -195,7 +231,7 @@ async function getAuthHeaders() {
     if (mode === 'api_key_only') {
       return { ...base, api_key: config.apiKey };
     }
-    const headers = { ...base, Authorization: `JWT ${config.apiKey}` };
+    const headers = { ...base, Authorization: authorizationFromAccessToken(config.apiKey) };
     if (mode === 'both') {
       headers.api_key = config.apiKey;
     }
@@ -208,7 +244,7 @@ async function getAuthHeaders() {
       return {
         ...base,
         api_key: config.apiKey,
-        Authorization: `JWT ${token}`,
+        Authorization: authorizationFromAccessToken(token),
       };
     }
     const oa = config.opaqueAuth;
@@ -234,7 +270,7 @@ async function getAuthHeaders() {
   }
 
   const token = await obtainAccessTokenFromLogin();
-  return { ...base, Authorization: `JWT ${token}` };
+  return { ...base, Authorization: authorizationFromAccessToken(token) };
 }
 
 async function mastersPost(path, body) {
@@ -400,8 +436,12 @@ async function generateIRN(_companyId, invoiceData) {
 
   if (!response.ok || !isMastersSuccess(data)) {
     logMastersFailure('generateIRN', response, data);
+    let detail = parseMastersError(data);
+    if (/access token was not found|invalid_request/i.test(detail)) {
+      detail += '. Fix auth: set MASTERS_INDIA_USERNAME and MASTERS_INDIA_PASSWORD (Masters portal) together with MASTERS_INDIA_API_KEY so the app can call token-auth and send Authorization. If you only have an API key, try MASTERS_INDIA_OPAQUE_AUTH=bearer_and_api_key or MASTERS_INDIA_TOKEN_SCHEME=bearer.';
+    }
     throw new Error(
-      `Masters India IRN generation failed: ${parseMastersError(data)} (HTTP ${response.status})`,
+      `Masters India IRN generation failed: ${detail} (HTTP ${response.status})`,
     );
   }
 
@@ -471,8 +511,12 @@ async function generateEwayBill(_companyId, irn, transportArgs, userGstin) {
 
   if (!response.ok || !isMastersSuccess(data)) {
     logMastersFailure('generateEwayBill', response, data);
+    let detail = parseMastersError(data);
+    if (/access token was not found|invalid_request/i.test(detail)) {
+      detail += '. Fix Masters India auth (same as IRN): USERNAME+PASSWORD+API_KEY, or MASTERS_INDIA_TOKEN_SCHEME=bearer.';
+    }
     throw new Error(
-      `Masters India E-Way Bill generation failed: ${parseMastersError(data)} (HTTP ${response.status})`,
+      `Masters India E-Way Bill generation failed: ${detail} (HTTP ${response.status})`,
     );
   }
 
