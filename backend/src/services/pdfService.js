@@ -175,6 +175,25 @@ const {
   fetchInvoiceTemplateRow,
   buildStandardInvoiceHtml,
 } = require('./invoiceTemplateRender');
+const { generateBarcodeBuffer } = require('./barcodeService');
+
+/** Embeds Code128 of invoice_number for print/PDF (data URI). */
+async function attachInvoiceBarcodeDataUri(invoiceData) {
+  const inv = invoiceData?.invoice;
+  const text = String(inv?.invoice_number || '').trim();
+  if (!text) return invoiceData;
+  try {
+    const buf = await generateBarcodeBuffer(text);
+    const invoice_barcode_data_uri = `data:image/png;base64,${buf.toString('base64')}`;
+    return {
+      ...invoiceData,
+      invoice: { ...inv, invoice_barcode_data_uri },
+    };
+  } catch (e) {
+    console.error('attachInvoiceBarcodeDataUri:', e.message);
+    return invoiceData;
+  }
+}
 
 async function htmlToPdfBuffer(html) {
   let puppeteer;
@@ -221,13 +240,15 @@ async function htmlToPdfBuffer(html) {
  */
 async function generateInvoicePdf(invoiceData, companyId, templateId) {
   const row = await fetchInvoiceTemplateRow(companyId, templateId || undefined);
-  const html = buildStandardInvoiceHtml(invoiceData, row);
+  const withBarcode = await attachInvoiceBarcodeDataUri(invoiceData);
+  const html = buildStandardInvoiceHtml(withBarcode, row);
   return htmlToPdfBuffer(html);
 }
 
 async function generateInvoiceHtmlForPreview(invoiceData, companyId, templateId) {
   const row = await fetchInvoiceTemplateRow(companyId, templateId || undefined);
-  return buildStandardInvoiceHtml(invoiceData, row);
+  const withBarcode = await attachInvoiceBarcodeDataUri(invoiceData);
+  return buildStandardInvoiceHtml(withBarcode, row);
 }
 
 function buildPurchaseOrderHtml({ purchase_order: po, items }) {
@@ -375,6 +396,7 @@ async function generatePurchaseOrderPdf(poData) {
 module.exports = {
   generateInvoicePdf,
   generateInvoiceHtmlForPreview,
+  attachInvoiceBarcodeDataUri,
   htmlToPdfBuffer,
   buildInvoiceHtml,
   generatePurchaseOrderPdf,

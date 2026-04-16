@@ -193,6 +193,9 @@ function buildHeaderHtml(inv, L, logoBlock) {
       <p>Phone: ${esc(inv.company_phone || '')} | Email: ${esc(inv.company_email || '')}</p>
       <p><strong>GSTIN:</strong> ${esc(inv.company_gstin || '—')}</p>
     </div>`;
+  const barcodeHtml = inv.invoice_barcode_data_uri
+    ? `<div style="margin-top:10px;text-align:right"><img src="${inv.invoice_barcode_data_uri}" alt="" style="max-height:44px;max-width:240px;display:inline-block" /></div>`
+    : '';
   const metaBlock = `
     <div class="header-invoice-meta">
       <div class="title-tax">${inv.irn ? 'e-TAX INVOICE' : 'TAX INVOICE'}</div>
@@ -202,6 +205,7 @@ function buildHeaderHtml(inv, L, logoBlock) {
         <tr><td><strong>Due Date</strong></td><td>${formatDate(inv.loan_due_date || inv.invoice_date)}</td></tr>
         <tr><td><strong>Status</strong></td><td>${esc(String(inv.status || '').toUpperCase())}</td></tr>
       </table>
+      ${barcodeHtml}
     </div>`;
 
   if (style === 'centered') {
@@ -434,6 +438,10 @@ function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
     ? `<p class="page-foot" style="margin-top:4px;">${esc(L.footer_text)}</p>`
     : '';
 
+  const invoiceBarcodeRow = inv.invoice_barcode_data_uri
+    ? `<table class="inv" style="margin:0;border:1px solid #000;border-top:0;border-collapse:collapse;width:100%"><tr><td style="text-align:center;padding:6px 8px;vertical-align:middle"><img src="${inv.invoice_barcode_data_uri}" alt="" style="max-height:38px;max-width:92%;display:inline-block" /></td></tr></table>`
+    : '';
+
   const map = {
     PRIMARY_COLOR: esc(barColor),
     ORIGINAL_LABEL: esc(L.original_copy_label || 'ORIGINAL FOR RECIPIENT'),
@@ -472,6 +480,7 @@ function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
     QR_BLOCK: qrBlock,
     COMPUTER_GEN_LINE: computerGenLine,
     FOOTER_EXTRA: footerExtra,
+    INVOICE_BARCODE_ROW: invoiceBarcodeRow,
   };
 
   for (const [k, v] of Object.entries(map)) {
@@ -609,6 +618,10 @@ function buildStandardInvoiceHtml({ invoice: inv, items }, templateRow) {
 
   const headerHtml = buildHeaderHtml(inv, L, logoBlock);
 
+  const invoiceBarcodeSimple = inv.invoice_barcode_data_uri
+    ? `<div style="text-align:center;margin:10px 0 6px"><img src="${inv.invoice_barcode_data_uri}" alt="" style="max-height:40px;max-width:100%" /></div>`
+    : '';
+
   const map = {
     PRIMARY_COLOR: esc(L.primary_color || '#1a56db'),
     FONT_FAMILY: font,
@@ -640,6 +653,7 @@ function buildStandardInvoiceHtml({ invoice: inv, items }, templateRow) {
     QR_BLOCK: qrBlock,
     FOOTER_TEXT: esc(L.footer_text || ''),
     LOAN_BLOCK: key === 'standard' ? loanBlock : '',
+    INVOICE_BARCODE_BLOCK: invoiceBarcodeSimple,
   };
 
   for (const [k, v] of Object.entries(map)) {

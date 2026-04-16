@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import {
-  ArrowLeft, Pencil, AlertTriangle, Clock, FileText,
+  ArrowLeft, Pencil, AlertTriangle,
   ArrowRightLeft, Landmark, Package, Shield, Car, Loader2, Printer,
 } from 'lucide-react';
 import { formatCurrency, formatDate, cn } from '@/lib/utils';
@@ -234,21 +234,14 @@ function VehicleIdentitySection({ vehicle, onEdit }) {
           <DetailRow label="Year">{vehicle.year}</DetailRow>
           <DetailRow label="Branch">{vehicle.branch_name}</DetailRow>
         </div>
-        <div className="mt-6 p-4 bg-muted/30 rounded-lg flex flex-col items-center justify-center border border-dashed border-border/60">
-          <img 
-            src={`/api/vehicles/${vehicle.id}/barcode`} 
-            alt={`Barcode for ${vehicle.chassis_number}`} 
-            className="h-16 object-contain mb-2 mix-blend-multiply"
-          />
-          <p className="font-mono text-sm tracking-widest text-muted-foreground">{vehicle.chassis_number}</p>
-          <div className="mt-3">
-            <Button size="sm" variant="outline" asChild>
-              <a href={`/api/vehicles/${vehicle.id}/label`} target="_blank" rel="noreferrer">
-                <Printer className="h-3.5 w-3.5 mr-2" />
-                Print Label
-              </a>
-            </Button>
-          </div>
+        <div className="mt-6 p-4 bg-muted/30 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border border-dashed border-border/60">
+          <p className="font-mono text-sm tracking-wide text-muted-foreground">{vehicle.chassis_number}</p>
+          <Button size="sm" variant="outline" asChild className="shrink-0">
+            <a href={`/api/vehicles/${vehicle.id}/label`} target="_blank" rel="noreferrer">
+              <Printer className="h-3.5 w-3.5 mr-2" />
+              Print Label
+            </a>
+          </Button>
         </div>
       </CardContent>
     </Card>
@@ -490,28 +483,6 @@ function LoanDetailsSection({ loans, canRemind, onRemind }) {
   );
 }
 
-function DocumentsSection() {
-  return (
-    <Card>
-      <CardHeader className="pb-4">
-        <div className="flex items-center gap-3">
-          <FileText className="h-5 w-5 text-primary" />
-          <CardTitle>Documents</CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-col items-center justify-center py-8 text-center">
-          <FileText className="h-10 w-10 text-muted-foreground/40 mb-3" />
-          <p className="text-sm text-muted-foreground">Add documents coming soon</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Upload RC, insurance papers, and other vehicle documents
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 export default function VehicleDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -586,7 +557,6 @@ export default function VehicleDetailPage() {
           canRemind={canRemind}
           onRemind={(loan) => setWaLoan({ id: loan.id, name: loan.customer_name })}
         />
-        <DocumentsSection />
 
         <EditVehicleSheet
           open={editOpen}

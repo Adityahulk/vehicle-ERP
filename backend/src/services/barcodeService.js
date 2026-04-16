@@ -1,11 +1,19 @@
 const bwipjs = require('bwip-js');
 
-async function generateBarcodeBuffer(chassisNumber) {
+/**
+ * Code 128 (via bwip-js) — common choice for alphanumeric vehicle / document IDs in logistics and retail.
+ * @param {string} text - Value to encode (non-empty after trim).
+ */
+async function generateBarcodeBuffer(text) {
+  const s = String(text ?? '').trim();
+  if (!s) {
+    return Promise.reject(new Error('Barcode text is required'));
+  }
   return new Promise((resolve, reject) => {
     bwipjs.toBuffer(
       {
         bcid: 'code128',
-        text: String(chassisNumber),
+        text: s,
         scale: 3,
         height: 12,
         includetext: true,

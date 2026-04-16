@@ -7,6 +7,7 @@ const ic = require('../controllers/invoicesController');
 const {
   generateInvoicePdf,
   generateInvoiceHtmlForPreview,
+  attachInvoiceBarcodeDataUri,
 } = require('../services/pdfService');
 const {
   fetchInvoiceTemplateRow,
@@ -73,7 +74,8 @@ router.get('/preview-template', requireMinRole('company_admin'), async (req, res
         signature_url: c.signature_url,
       });
     }
-    const html = buildStandardInvoiceHtml(data, row);
+    const withBarcode = await attachInvoiceBarcodeDataUri(data);
+    const html = buildStandardInvoiceHtml(withBarcode, row);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
   } catch (err) {
