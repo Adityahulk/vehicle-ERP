@@ -4,8 +4,21 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Loader2, Download } from 'lucide-react';
+import { toast } from 'sonner';
 import { apiPath } from '@/lib/apiPrefix';
 import api from '@/lib/api';
+
+function formatPreviewErrorMessage(data, status) {
+  if (!data || typeof data !== 'object') {
+    return status ? `Preview failed (${status})` : 'Preview failed';
+  }
+  const details = data.details;
+  if (Array.isArray(details) && details.length) {
+    return details.map((d) => (d.path ? `${d.path}: ${d.message}` : d.message)).join('; ');
+  }
+  if (typeof data.details === 'string' && data.details) return data.details;
+  return data.error || 'Preview failed';
+}
 
 export default function QuotationPreviewModal({
   open,
@@ -41,7 +54,18 @@ export default function QuotationPreviewModal({
         if (quotationId) {
           const url = apiPath(`/quotations/${quotationId}/preview-html`);
           const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-          html = await res.text();
+          const text = await res.text();
+          if (!res.ok) {
+            let data;
+            try {
+              data = JSON.parse(text);
+            } catch {
+              data = { error: text.slice(0, 200) || `HTTP ${res.status}` };
+            }
+            if (alive) toast.error(formatPreviewErrorMessage(data, res.status));
+            return;
+          }
+          html = text;
         } else if (getPayloadRef.current) {
           const payload = getPayloadRef.current();
           const res = await fetch(apiPath('/quotations/preview-html'), {
@@ -52,7 +76,18 @@ export default function QuotationPreviewModal({
             },
             body: JSON.stringify(payload),
           });
-          html = await res.text();
+          const text = await res.text();
+          if (!res.ok) {
+            let data;
+            try {
+              data = JSON.parse(text);
+            } catch {
+              data = { error: text.slice(0, 200) || `HTTP ${res.status}` };
+            }
+            if (alive) toast.error(formatPreviewErrorMessage(data, res.status));
+            return;
+          }
+          html = text;
         } else {
           if (alive) setLoading(false);
           return;

@@ -9,7 +9,10 @@ const router = Router();
 router.use(verifyToken);
 
 const PAISE_HINT =
-  'penalty_per_day must be in paise (integer). For ₹100/day, enter 10000.';
+  'penalty_per_day must be a whole number of paise sent by the API (the app converts ₹ to paise).';
+
+const PENALTY_MIN_RUPEES =
+  'Daily penalty must be 0 or at least ₹1/day (less than ₹1/day is not allowed).';
 
 const createLoanSchema = z
   .object({
@@ -30,7 +33,7 @@ const createLoanSchema = z
     if (data.penalty_per_day > 0 && data.penalty_per_day < 100) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: PAISE_HINT,
+        message: PENALTY_MIN_RUPEES,
         path: ['penalty_per_day'],
       });
     }

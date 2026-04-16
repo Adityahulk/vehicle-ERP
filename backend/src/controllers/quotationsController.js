@@ -771,87 +771,104 @@ async function getQuotationPdf(req, res) {
 }
 
 async function getQuotationPreviewHtml(req, res) {
-  const bundle = await loadQuotationBundle(req.params.id, req.user.company_id);
-  if (!bundle) return res.status(404).json({ error: 'Quotation not found' });
-  const html = buildQuotationHtml(bundle);
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.send(html);
+  try {
+    const bundle = await loadQuotationBundle(req.params.id, req.user.company_id);
+    if (!bundle) return res.status(404).json({ error: 'Quotation not found' });
+    const html = buildQuotationHtml(bundle);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (err) {
+    console.error('getQuotationPreviewHtml:', err);
+    res.status(500).json({
+      error: 'Quotation preview could not be generated.',
+      details: process.env.NODE_ENV === 'development' ? String(err.message) : undefined,
+    });
+  }
 }
 
 async function previewQuotationHtmlFromBody(req, res) {
-  const company_id = req.user.company_id;
-  const body = req.validated;
-  const comp = await fetchCompanyRow(company_id);
-  const custGst = await fetchCustomerGstin(body.customer_id, company_id);
-  const interstate = resolveInterstate(comp.gstin, custGst);
-  const linesIn = buildLinesFromBody(body.items);
-  const totals = computeQuotationTotals(
-    linesIn,
-    interstate,
-    body.discount_type || 'flat',
-    Number(body.discount_value) || 0,
-  );
+  try {
+    const company_id = req.user.company_id;
+    const body = req.validated;
+    const comp = await fetchCompanyRow(company_id);
+    const custGst = await fetchCustomerGstin(body.customer_id, company_id);
+    const interstate = resolveInterstate(comp.gstin, custGst);
+    const linesIn = buildLinesFromBody(body.items);
+    const totals = computeQuotationTotals(
+      linesIn,
+      interstate,
+      body.discount_type || 'flat',
+      Number(body.discount_value) || 0,
+    );
 
-  const q = {
-    ...body,
-    quotation_number: 'PREVIEW',
-    quotation_date: body.quotation_date || new Date().toISOString().split('T')[0],
-    valid_until_date: body.valid_until_date,
-    subtotal: totals.subtotal,
-    discount_amount: totals.discount_amount,
-    cgst_amount: totals.cgst_amount,
-    sgst_amount: totals.sgst_amount,
-    igst_amount: totals.igst_amount,
-    total: totals.total,
-    customer_notes: body.customer_notes,
-    terms_and_conditions: body.terms_and_conditions || DEFAULT_TERMS,
-  };
-
-  const previewBranchId =
-    req.user.role === 'branch_manager' ? req.user.branch_id : (body.branch_id || req.user.branch_id);
-  const { rows: br } = await query(
-    `SELECT name, address, phone FROM branches WHERE id = $1 AND company_id = $2`,
-    [previewBranchId, company_id],
-  );
-
-  const customer = body.customer_id
-    ? (await query(
-      `SELECT name, phone, email, address FROM customers WHERE id = $1 AND company_id = $2`,
-      [body.customer_id, company_id],
-    )).rows[0]
-    : {
-      name: body.customer_name_override,
-      phone: body.customer_phone_override,
-      email: body.customer_email_override,
-      address: body.customer_address_override,
+    const q = {
+      ...body,
+      company_id,
+      quotation_number: 'PREVIEW',
+      quotation_date: body.quotation_date || new Date().toISOString().split('T')[0],
+      valid_until_date: body.valid_until_date,
+      subtotal: totals.subtotal,
+      discount_amount: totals.discount_amount,
+      cgst_amount: totals.cgst_amount,
+      sgst_amount: totals.sgst_amount,
+      igst_amount: totals.igst_amount,
+      total: totals.total,
+      customer_notes: body.customer_notes,
+      terms_and_conditions: body.terms_and_conditions || DEFAULT_TERMS,
     };
 
-  let vehicle = null;
-  if (body.vehicle_id) {
-    const { rows: v } = await query(
-      `SELECT make, model, variant, color, year, chassis_number, selling_price
-       FROM vehicles WHERE id = $1 AND company_id = $2`,
-      [body.vehicle_id, company_id],
+    const previewBranchId =
+      req.user.role === 'branch_manager' ? req.user.branch_id : (body.branch_id || req.user.branch_id);
+    const { rows: br } = await query(
+      `SELECT name, address, phone FROM branches WHERE id = $1 AND company_id = $2`,
+      [previewBranchId, company_id],
     );
-    vehicle = v[0] || null;
+
+    const customer = body.customer_id
+      ? (await query(
+        `SELECT name, phone, email, address FROM customers WHERE id = $1 AND company_id = $2`,
+        [body.customer_id, company_id],
+      )).rows[0]
+      : {
+        name: body.customer_name_override,
+        phone: body.customer_phone_override,
+        email: body.customer_email_override,
+        address: body.customer_address_override,
+      };
+
+    let vehicle = null;
+    if (body.vehicle_id) {
+      const { rows: v } = await query(
+        `SELECT make, model, variant, color, year, chassis_number, selling_price
+         FROM vehicles WHERE id = $1 AND company_id = $2`,
+        [body.vehicle_id, company_id],
+      );
+      vehicle = v[0] || null;
+    }
+
+    const bundle = {
+      quotation: q,
+      items: totals.lines.map((li, i) => ({ ...li, id: `tmp-${i}` })),
+      customer,
+      vehicle,
+      vehicleOverride: body.vehicle_details_override || {},
+      company: comp,
+      branch: br[0] || {},
+      preparedByName: req.user.name || req.user.email,
+      logo_url: comp.logo_url,
+      signature_url: comp.signature_url,
+    };
+
+    const html = buildQuotationHtml(bundle);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (err) {
+    console.error('previewQuotationHtmlFromBody:', err);
+    res.status(500).json({
+      error: 'Quotation preview could not be generated.',
+      details: process.env.NODE_ENV === 'development' ? String(err.message) : undefined,
+    });
   }
-
-  const bundle = {
-    quotation: q,
-    items: totals.lines.map((li, i) => ({ ...li, id: `tmp-${i}` })),
-    customer,
-    vehicle,
-    vehicleOverride: body.vehicle_details_override || {},
-    company: comp,
-    branch: br[0] || {},
-    preparedByName: req.user.name || req.user.email,
-    logo_url: comp.logo_url,
-    signature_url: comp.signature_url,
-  };
-
-  const html = buildQuotationHtml(bundle);
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.send(html);
 }
 
 module.exports = {

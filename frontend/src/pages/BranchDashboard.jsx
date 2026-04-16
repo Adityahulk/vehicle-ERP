@@ -17,6 +17,7 @@ import {
   Car,
   Receipt,
   Loader2,
+  FileText,
 } from 'lucide-react';
 
 const statusColors = {
@@ -117,6 +118,9 @@ export default function BranchDashboard() {
         </Button>
         <Button variant="outline" onClick={() => navigate('/expenses')} className="gap-2">
           <Receipt className="h-4 w-4" /> Add Expense
+        </Button>
+        <Button variant="outline" onClick={() => navigate('/quotations/new')} className="gap-2">
+          <FileText className="h-4 w-4" /> Add Quotation
         </Button>
       </div>
 

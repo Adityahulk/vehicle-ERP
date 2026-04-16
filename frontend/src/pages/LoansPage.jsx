@@ -70,7 +70,10 @@ function AddLoanDialog({ open, onOpenChange }) {
     onError: (err) => {
       const d = err.response?.data;
       const details = d?.details;
-      const msg = d?.error || (Array.isArray(details) ? details.map((e) => e.message).join(', ') : null) || 'Failed to create loan';
+      let msg = d?.error || 'Failed to create loan';
+      if (Array.isArray(details) && details.length) {
+        msg = details.map((e) => (e.path ? `${e.path}: ${e.message}` : e.message)).join('; ');
+      }
       setError(msg);
     },
   });
@@ -79,6 +82,10 @@ function AddLoanDialog({ open, onOpenChange }) {
     e.preventDefault();
     setError('');
     const pp = form.penalty_per_day === '' ? 0 : Math.round(Number(form.penalty_per_day) * 100);
+    if (pp > 0 && pp < 100) {
+      setError('Daily penalty must be 0 or at least ₹1/day (enter 1.00 or more in rupees).');
+      return;
+    }
     mutation.mutate({
       invoice_id: form.invoice_id,
       bank_name: form.bank_name,
@@ -155,7 +162,7 @@ function AddLoanDialog({ open, onOpenChange }) {
               <div className="space-y-1">
                 <Label>Penalty Per Day (₹) *</Label>
                 <Input type="number" step="0.01" min="0" value={form.penalty_per_day} onChange={set('penalty_per_day')} required />
-                <p className="text-[11px] text-muted-foreground">Stored as paise (e.g. 100 for ₹100/day)</p>
+                <p className="text-[11px] text-muted-foreground">Enter rupees (e.g. 100 for ₹100/day). Use 0 for no daily penalty; if set, minimum is ₹1/day.</p>
               </div>
             </div>
             <div className="space-y-1">
