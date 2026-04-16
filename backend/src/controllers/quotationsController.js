@@ -1,14 +1,9 @@
-const crypto = require('crypto');
-const redis = require('../config/redis');
 const { query, getClient } = require('../config/db');
 const { logAudit } = require('../middleware/auditLog');
 const { computeQuotationTotals, resolveInterstate } = require('../services/quotationCalculator');
 const { buildQuotationHtml, DEFAULT_TERMS } = require('../services/quotationRenderService');
 const { htmlToPdfBuffer } = require('../services/pdfService');
 const { insertInvoiceWithItems, fetchFullInvoice } = require('./invoicesController');
-
-const SHARE_PREFIX = 'quotation:share:';
-const SHARE_TTL_SEC = 7 * 24 * 3600;
 
 function financialYearFromDate(dateStr) {
   const d = (dateStr || new Date().toISOString()).split('T')[0];
@@ -755,16 +750,24 @@ async function convertToInvoice(req, res) {
 }
 
 async function getQuotationPdf(req, res) {
-  const bundle = await loadQuotationBundle(req.params.id, req.user.company_id);
-  if (!bundle) return res.status(404).json({ error: 'Quotation not found' });
-  const html = buildQuotationHtml(bundle);
-  const pdf = await htmlToPdfBuffer(html);
-  res.set({
-    'Content-Type': 'application/pdf',
-    'Content-Disposition': `inline; filename="${bundle.quotation.quotation_number}.pdf"`,
-    'Content-Length': pdf.length,
-  });
-  res.send(pdf);
+  try {
+    const bundle = await loadQuotationBundle(req.params.id, req.user.company_id);
+    if (!bundle) return res.status(404).json({ error: 'Quotation not found' });
+    const html = buildQuotationHtml(bundle);
+    const pdf = await htmlToPdfBuffer(html);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${bundle.quotation.quotation_number}.pdf"`,
+      'Content-Length': pdf.length,
+    });
+    res.send(pdf);
+  } catch (err) {
+    console.error('getQuotationPdf:', err.message);
+    res.status(500).json({
+      error:
+        'PDF generation failed. Ensure Google Chrome or Chromium is installed on the server and try again.',
+    });
+  }
 }
 
 async function getQuotationPreviewHtml(req, res) {
@@ -773,31 +776,6 @@ async function getQuotationPreviewHtml(req, res) {
   const html = buildQuotationHtml(bundle);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(html);
-}
-
-async function shareQuotationLink(req, res) {
-  const { id } = req.params;
-  const company_id = req.user.company_id;
-  const bundle = await loadQuotationBundle(id, company_id);
-  if (!bundle) return res.status(404).json({ error: 'Quotation not found' });
-
-  const token = crypto.randomBytes(24).toString('hex');
-  await redis.set(
-    `${SHARE_PREFIX}${token}`,
-    JSON.stringify({ quotationId: id, companyId: company_id }),
-    'EX',
-    SHARE_TTL_SEC,
-  );
-
-  const base = (process.env.PUBLIC_API_URL || '').replace(/\/$/, '');
-  const pathUrl = `/api/public/quotations/${token}`;
-  const url = base ? `${base}${pathUrl}` : pathUrl;
-
-  res.json({
-    url,
-    expires_in_seconds: SHARE_TTL_SEC,
-    expires_at: new Date(Date.now() + SHARE_TTL_SEC * 1000).toISOString(),
-  });
 }
 
 async function previewQuotationHtmlFromBody(req, res) {
@@ -889,7 +867,6 @@ module.exports = {
   convertToInvoice,
   getQuotationPdf,
   getQuotationPreviewHtml,
-  shareQuotationLink,
   previewQuotationHtmlFromBody,
   loadQuotationBundle,
   buildQuotationHtml,

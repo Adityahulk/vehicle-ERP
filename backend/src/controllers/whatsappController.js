@@ -3,8 +3,6 @@ const ic = require('./invoicesController');
 const {
   sendWhatsApp,
   sendCustomMessage,
-  generateShareLink,
-  generateSharePdfLink,
   validateTemplatePlaceholders,
 } = require('../services/whatsappService');
 const { calculatePenalty } = require('../services/penaltyService');
@@ -21,6 +19,9 @@ function fmtDate(d) {
   if (!d) return 'N/A';
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
+
+/** Replaces {share_link} in templates — we do not host PDFs for public sharing. */
+const PDF_SHARE_HINT = 'Please contact us at the branch for a PDF copy of this document.';
 
 async function sendInvoiceWhatsApp(req, res) {
   try {
@@ -47,22 +48,20 @@ async function sendInvoiceWhatsApp(req, res) {
     }
 
     const vehicle = [inv.vehicle_make, inv.vehicle_model].filter(Boolean).join(' ') || 'N/A';
-    const shareLink = generateShareLink('invoice', invoiceId, companyId);
     const variables = {
       customer_name: inv.customer_name || 'Customer',
       company_name: inv.company_name || 'Our dealership',
       invoice_number: inv.invoice_number,
       vehicle,
       amount: fmtRupees(inv.total),
-      share_link: shareLink,
+      share_link: PDF_SHARE_HINT,
       branch_phone: inv.branch_phone || inv.company_phone || 'N/A',
     };
 
     const bodyOverride = req.body?.message;
     let previewMessage;
     let result;
-    const pdfLink = generateSharePdfLink('invoice', invoiceId, companyId);
-    
+
     if (bodyOverride && String(bodyOverride).trim()) {
       result = await sendCustomMessage({
         companyId,
@@ -70,7 +69,6 @@ async function sendInvoiceWhatsApp(req, res) {
         recipientName: inv.customer_name,
         messageBody: String(bodyOverride).trim(),
         triggeredByUserId: req.user.id,
-        mediaUrl: pdfLink,
       });
       previewMessage = String(bodyOverride).trim();
     } else {
@@ -83,7 +81,6 @@ async function sendInvoiceWhatsApp(req, res) {
         referenceType: 'invoice',
         variables,
         triggeredByUserId: req.user.id,
-        mediaUrl: pdfLink,
       });
       previewMessage = result.previewMessage;
     }
@@ -124,7 +121,6 @@ async function sendQuotationWhatsApp(req, res) {
     }
 
     const vehicle = [qrow.vehicle_make, qrow.vehicle_model].filter(Boolean).join(' ') || 'N/A';
-    const shareLink = generateShareLink('quotation', quotationId, companyId);
     const custName = qrow.customer_name_override || bundle.customer?.name || 'Customer';
 
     const { rows: co } = await query(`SELECT name, phone FROM companies WHERE id = $1`, [companyId]);
@@ -137,15 +133,14 @@ async function sendQuotationWhatsApp(req, res) {
       vehicle,
       amount: fmtRupees(qrow.total),
       valid_until: fmtDate(qrow.valid_until_date),
-      share_link: shareLink,
+      share_link: PDF_SHARE_HINT,
       branch_phone: br[0]?.phone || co[0]?.phone || 'N/A',
     };
 
     const bodyOverride = req.body?.message;
     let previewMessage;
     let result;
-    const pdfLink = generateSharePdfLink('quotation', quotationId, companyId);
-    
+
     if (bodyOverride && String(bodyOverride).trim()) {
       result = await sendCustomMessage({
         companyId,
@@ -153,7 +148,6 @@ async function sendQuotationWhatsApp(req, res) {
         recipientName: custName,
         messageBody: String(bodyOverride).trim(),
         triggeredByUserId: req.user.id,
-        mediaUrl: pdfLink,
       });
       previewMessage = String(bodyOverride).trim();
     } else {
@@ -166,7 +160,6 @@ async function sendQuotationWhatsApp(req, res) {
         referenceType: 'quotation',
         variables,
         triggeredByUserId: req.user.id,
-        mediaUrl: pdfLink,
       });
       previewMessage = result.previewMessage;
     }
@@ -460,14 +453,13 @@ async function previewInvoiceMessage(req, res) {
     if (!data) return res.status(404).json({ error: 'Invoice not found' });
     const inv = data.invoice;
     const vehicle = [inv.vehicle_make, inv.vehicle_model].filter(Boolean).join(' ') || 'N/A';
-    const shareLink = generateShareLink('invoice', invoiceId, companyId);
     const variables = {
       customer_name: inv.customer_name || 'Customer',
       company_name: inv.company_name || 'Our dealership',
       invoice_number: inv.invoice_number,
       vehicle,
       amount: fmtRupees(inv.total),
-      share_link: shareLink,
+      share_link: PDF_SHARE_HINT,
       branch_phone: inv.branch_phone || inv.company_phone || 'N/A',
     };
     const { rows: tpl } = await query(
@@ -500,7 +492,6 @@ async function previewQuotationMessage(req, res) {
     const phone = qrow.customer_phone_override || bundle.customer?.phone;
     const custName = qrow.customer_name_override || bundle.customer?.name || 'Customer';
     const vehicle = [qrow.vehicle_make, qrow.vehicle_model].filter(Boolean).join(' ') || 'N/A';
-    const shareLink = generateShareLink('quotation', quotationId, companyId);
     const { rows: co } = await query(`SELECT name, phone FROM companies WHERE id = $1`, [companyId]);
     const { rows: br } = await query(`SELECT phone FROM branches WHERE id = $1`, [qrow.branch_id]);
     const variables = {
@@ -510,7 +501,7 @@ async function previewQuotationMessage(req, res) {
       vehicle,
       amount: fmtRupees(qrow.total),
       valid_until: fmtDate(qrow.valid_until_date),
-      share_link: shareLink,
+      share_link: PDF_SHARE_HINT,
       branch_phone: br[0]?.phone || co[0]?.phone || 'N/A',
     };
     const { rows: tpl } = await query(

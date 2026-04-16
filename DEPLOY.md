@@ -383,7 +383,7 @@ curl http://localhost:4000/api/health
 
 1. Open `https://erp.yourdomain.com` in your browser
 2. You should see the login page
-3. Login with: `admin@demo.com` / `Demo@1234`
+3. Login with: `admin@demo.com` / `VehicleERP@2026`
 4. Check that the dashboard loads with seed data
 
 ---

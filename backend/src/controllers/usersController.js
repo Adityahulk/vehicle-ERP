@@ -23,6 +23,10 @@ async function createUser(req, res) {
     return res.status(409).json({ error: 'A user with this email already exists' });
   }
 
+  if (['branch_manager', 'staff'].includes(role) && !branch_id) {
+    return res.status(400).json({ error: 'Branch is required for branch managers and staff' });
+  }
+
   if (branch_id) {
     const branch = await query(
       `SELECT id FROM branches WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
@@ -55,10 +59,11 @@ async function listUsers(req, res) {
   const params = [company_id];
   let idx = 2;
 
-  // branch_manager and staff only see their own branch
+  // branch_manager and staff only see their own branch (never list company/super admins)
   if (callerRole === 'branch_manager' || callerRole === 'staff') {
     conditions.push(`u.branch_id = $${idx++}`);
     params.push(callerBranch);
+    conditions.push(`u.role NOT IN ('company_admin', 'super_admin')`);
   } else if (branch_id) {
     conditions.push(`u.branch_id = $${idx++}`);
     params.push(branch_id);
@@ -109,7 +114,7 @@ async function updateUser(req, res) {
 
   // Fetch target user
   const target = await query(
-    `SELECT id, role FROM users WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
+    `SELECT id, role, branch_id FROM users WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
     [id, company_id],
   );
   if (target.rows.length === 0) {
@@ -139,6 +144,16 @@ async function updateUser(req, res) {
     if (branch.rows.length === 0) {
       return res.status(400).json({ error: 'Invalid branch' });
     }
+  }
+
+  const mergedRole = updates.role !== undefined ? updates.role : targetUser.role;
+  const mergedBranchId =
+    updates.branch_id !== undefined ? updates.branch_id : targetUser.branch_id;
+  if (
+    ['branch_manager', 'staff'].includes(mergedRole)
+    && (mergedBranchId === null || mergedBranchId === undefined)
+  ) {
+    return res.status(400).json({ error: 'Branch is required for branch managers and staff' });
   }
 
   const setClauses = [];

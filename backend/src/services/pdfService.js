@@ -199,7 +199,10 @@ async function htmlToPdfBuffer(html) {
   const browser = await puppeteer.launch(launchOptions);
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    await page.setContent(html, {
+      waitUntil: 'domcontentloaded',
+      timeout: 90_000,
+    });
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
@@ -354,7 +357,10 @@ async function generatePurchaseOrderPdf(poData) {
   const browser = await puppeteer.launch(launchOptions);
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    await page.setContent(html, {
+      waitUntil: 'domcontentloaded',
+      timeout: 90_000,
+    });
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,

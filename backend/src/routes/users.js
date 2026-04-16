@@ -7,14 +7,24 @@ const usersController = require('../controllers/usersController');
 
 const router = Router();
 
-const createUserSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(255),
-  email: z.string().email('Valid email required'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  phone: z.string().max(20).optional(),
-  role: z.enum(['company_admin', 'branch_manager', 'staff', 'ca']),
-  branch_id: z.string().uuid().optional(),
-});
+const createUserSchema = z
+  .object({
+    name: z.string().min(1, 'Name is required').max(255),
+    email: z.string().email('Valid email required'),
+    password: z.string().min(6, 'Password must be at least 6 characters'),
+    phone: z.string().max(20).optional(),
+    role: z.enum(['company_admin', 'branch_manager', 'staff', 'ca']),
+    branch_id: z.string().uuid().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (['branch_manager', 'staff'].includes(data.role) && !data.branch_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Branch is required for branch managers and staff',
+        path: ['branch_id'],
+      });
+    }
+  });
 
 const updateUserSchema = z.object({
   name: z.string().min(1).max(255).optional(),

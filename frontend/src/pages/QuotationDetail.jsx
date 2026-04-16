@@ -3,60 +3,31 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
-} from '@/components/ui/dialog';
 import QuotationPreviewModal from '@/components/QuotationPreviewModal';
 import api from '@/lib/api';
-import useAuthStore from '@/store/authStore';
 import { usePermissions } from '@/hooks/usePermissions';
 import ReadOnlyBadge from '@/components/ReadOnlyBadge';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
-  Loader2, Pencil, Send, FileDown, Link2, Trash2, Check, X, Copy, ExternalLink,
+  Loader2, Pencil, Send, FileDown, Trash2, Check, X,
   RefreshCw, FileText, Eye,
 } from 'lucide-react';
-
-function waLink(phone, text) {
-  const n = String(phone || '').replace(/\D/g, '');
-  const q = encodeURIComponent(text);
-  return `https://wa.me/${n}?text=${q}`;
-}
 
 export default function QuotationDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const user = useAuthStore((s) => s.user);
   const { canWrite, isCA } = usePermissions();
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [sendDialog, setSendDialog] = useState(false);
-  const [shareUrl, setShareUrl] = useState('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['quotation', id],
     queryFn: () => api.get(`/quotations/${id}`).then((r) => r.data),
     enabled: !!id,
   });
-
-  const { data: company } = useQuery({
-    queryKey: ['company', user?.company_id],
-    queryFn: () => api.get(`/companies/${user.company_id}`).then((r) => r.data.company),
-    enabled: !!user?.company_id,
-  });
-
-  const branchIdForQ = data?.quotation?.branch_id;
-  const { data: branches } = useQuery({
-    queryKey: ['branches'],
-    queryFn: () => api.get('/branches').then((r) => r.data.branches),
-  });
-  const branch = (branches || []).find((b) => b.id === branchIdForQ);
 
   const q = data?.quotation;
   const items = data?.items || [];
@@ -68,15 +39,10 @@ export default function QuotationDetailPage() {
 
   const sendMut = useMutation({
     mutationFn: () => api.post(`/quotations/${id}/send`),
-    onSuccess: async () => {
+    onSuccess: () => {
       invalidate();
       qc.invalidateQueries({ queryKey: ['quotations'] });
-      const { data: d } = await api.get(`/quotations/${id}/share-link`);
-      const url = d.url?.startsWith('http') ? d.url : `${window.location.origin}${d.url}`;
-      setShareUrl(url);
-      await navigator.clipboard.writeText(url);
-      setSendDialog(true);
-      toast.success('Marked as sent. Share link copied.');
+      toast.success('Marked as sent');
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Failed'),
   });
@@ -128,18 +94,6 @@ export default function QuotationDetailPage() {
     onError: (e) => toast.error(e.response?.data?.error || 'Convert failed'),
   });
 
-  const copyShare = async () => {
-    try {
-      const { data: d } = await api.get(`/quotations/${id}/share-link`);
-      const url = d.url?.startsWith('http') ? d.url : `${window.location.origin}${d.url}`;
-      await navigator.clipboard.writeText(url);
-      setShareUrl(url);
-      toast.success('Link copied');
-    } catch {
-      toast.error('Failed');
-    }
-  };
-
   const downloadPdf = async () => {
     try {
       const res = await api.get(`/quotations/${id}/pdf`, { responseType: 'blob' });
@@ -159,11 +113,6 @@ export default function QuotationDetailPage() {
   const makeModel = vehicle
     ? `${vehicle.make || ''} ${vehicle.model || ''} ${vehicle.variant || ''}`.trim()
     : [vo.make, vo.model, vo.variant].filter(Boolean).join(' ');
-
-  const waMessage = `Dear ${custName}, please find your quotation for ${makeModel || 'your vehicle'} from ${company?.name || 'us'}.
-Quotation No: ${q?.quotation_number} | Total: ${formatCurrency(q?.total)} | Valid till: ${formatDate(q?.valid_until_date)}.
-View here: ${shareUrl || '(generate share link)'}
-For queries call: ${branch?.phone || company?.phone || ''}`;
 
   if (isLoading || !q) {
     return (
@@ -223,7 +172,6 @@ For queries call: ${branch?.phone || company?.phone || ''}`;
             )}
             <Button variant="outline" size="sm" onClick={() => setPreviewOpen(true)}><Eye className="h-4 w-4 mr-1" /> Preview</Button>
             <Button variant="outline" size="sm" onClick={downloadPdf}><FileDown className="h-4 w-4 mr-1" /> PDF</Button>
-            {canWrite && <Button variant="outline" size="sm" onClick={copyShare}><Link2 className="h-4 w-4 mr-1" /> Share</Button>}
             {canWrite && q.status === 'draft' && (
               <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { if (window.confirm('Delete this draft?')) delMut.mutate(); }}>
                 <Trash2 className="h-4 w-4" />
@@ -306,40 +254,6 @@ For queries call: ${branch?.phone || company?.phone || ''}`;
       </div>
 
       <QuotationPreviewModal open={previewOpen} onOpenChange={setPreviewOpen} quotationId={id} />
-
-      <Dialog open={sendDialog} onOpenChange={setSendDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Share quotation</DialogTitle>
-            <DialogDescription>
-              Link copied to clipboard. Share via WhatsApp or copy again below.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 text-sm">
-            <div>
-              <Label className="text-xs text-muted-foreground">Link</Label>
-              <div className="flex gap-2 mt-1">
-                <Input readOnly value={shareUrl} className="font-mono text-xs" />
-                <Button type="button" size="icon" variant="outline" onClick={() => { navigator.clipboard.writeText(shareUrl); toast.success('Copied'); }}><Copy className="h-4 w-4" /></Button>
-              </div>
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">WhatsApp message</Label>
-              <Textarea readOnly rows={6} value={waMessage} className="mt-1 text-xs" />
-            </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={() => setSendDialog(false)}>Close</Button>
-            {custPhone && (
-              <Button type="button" asChild>
-                <a href={waLink(custPhone, waMessage)} target="_blank" rel="noreferrer">
-                  <ExternalLink className="h-4 w-4 mr-2" /> Open WhatsApp
-                </a>
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </AppLayout>
   );
 }

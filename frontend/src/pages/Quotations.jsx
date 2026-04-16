@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import AppLayout from '@/components/AppLayout';
@@ -7,14 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import BulkImport from '@/components/BulkImport';
 import WhatsAppSendDialog, { WhatsAppIconButton } from '@/components/WhatsAppSendDialog';
 import api from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import ReadOnlyBadge from '@/components/ReadOnlyBadge';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import {
-  Plus, Search, Loader2, Eye, Pencil, Send, FileDown, Link2, FileText,
+  Plus, Search, Loader2, Eye, Pencil, Send, FileDown, FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -44,11 +43,10 @@ export default function QuotationsPage() {
   const [status, setStatus] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
-  const [importOpen, setImportOpen] = useState(false);
   const [waDialog, setWaDialog] = useState(null);
   const [waMeta, setWaMeta] = useState({});
 
-  const markQuotationWaSent = useCallback((quotationId) => {
+  const markQuotationWaSent = (quotationId) => {
     const now = Date.now();
     setWaMeta((u) => ({ ...u, [quotationId]: { lastSent: now, flash: true } }));
     setTimeout(() => {
@@ -58,7 +56,7 @@ export default function QuotationsPage() {
         return { ...u, [quotationId]: { ...cur, flash: false } };
       });
     }, 3000);
-  }, []);
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput), 400);
@@ -75,17 +73,6 @@ export default function QuotationsPage() {
   });
 
   const rows = data?.quotations || [];
-
-  const copyShare = useCallback(async (id) => {
-    try {
-      const { data: d } = await api.get(`/quotations/${id}/share-link`);
-      const url = d.url?.startsWith('http') ? d.url : `${window.location.origin}${d.url}`;
-      await navigator.clipboard.writeText(url);
-      toast.success('Share link copied (valid 7 days)');
-    } catch {
-      toast.error('Could not create share link');
-    }
-  }, []);
 
   const downloadPdf = async (id, num) => {
     try {
@@ -110,24 +97,12 @@ export default function QuotationsPage() {
         </div>
         {canWrite && (
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setImportOpen(true)}>
-              Import
-            </Button>
             <Button onClick={() => navigate('/quotations/new')}>
               <Plus className="h-4 w-4 mr-2" /> New Quotation
             </Button>
           </div>
         )}
       </div>
-
-      {canWrite && (
-        <BulkImport
-          type="quotations"
-          open={importOpen}
-          onOpenChange={setImportOpen}
-          onSuccess={() => qc.invalidateQueries({ queryKey: ['quotations'] })}
-        />
-      )}
 
       <div className="flex flex-col gap-4 mb-4">
         <div className="relative max-w-md">
@@ -238,11 +213,6 @@ export default function QuotationsPage() {
                             name: q.customer_display_name || 'Customer',
                           })}
                         />
-                      )}
-                      {canWrite && (
-                        <Button variant="ghost" size="sm" title="Share link" onClick={() => copyShare(q.id)}>
-                          <Link2 className="h-3.5 w-3.5" />
-                        </Button>
                       )}
                     </div>
                   </TableCell>

@@ -93,11 +93,12 @@ Open http://localhost:5173 and log in:
 
 | Email | Password | Role |
 |-------|----------|------|
-| admin@demo.com | Demo@1234 | Company Admin |
-| manager1@demo.com | Demo@1234 | Branch Manager (Mapusa) |
-| manager2@demo.com | Demo@1234 | Branch Manager (Panaji) |
-| staff1@demo.com | Demo@1234 | Staff (Mapusa) |
-| staff2@demo.com | Demo@1234 | Staff (Panaji) |
+| admin@demo.com | VehicleERP@2026 | Company Admin |
+| manager1@demo.com | VehicleERP@2026 | Branch Manager (Delhi RO) |
+| manager2@demo.com | VehicleERP@2026 | Branch Manager (Satna Sales) |
+| staff1@demo.com | VehicleERP@2026 | Staff (Delhi RO) |
+| staff2@demo.com | VehicleERP@2026 | Staff (Satna Sales) |
+| ca@demo.com | VehicleERP@2026 | CA (company-wide) |
 
 ---
 

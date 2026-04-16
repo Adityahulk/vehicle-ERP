@@ -5,7 +5,7 @@ const { pool } = require('../config/db');
 const { seedDefaultLeaveTypes } = require('../services/leaveTypesService');
 const { workingDatesInRange } = require('../controllers/attendanceLeaveController');
 
-const DEMO_PASSWORD = 'Demo@1234';
+const DEMO_PASSWORD = 'VehicleERP@2026';
 
 const VEHICLE_DATA = [
   { chassis: 'MA3FJEB1S00123456', engine: 'K12MN1234567', make: 'Maruti Suzuki', model: 'Alto K10', variant: 'VXi', color: 'Silky Silver', year: 2024, purchase: 41500000, selling: 44900000 },
@@ -519,17 +519,17 @@ async function seed() {
     console.log('  ║         ✓ Seed Complete — Mavidya Group (MVG)         ║');
     console.log('  ╠═══════════════════════════════════════════════════════╣');
     console.log('  ║                                                       ║');
-    console.log('  ║  Company : Mavidya Group - Pradeep Guru Company       ║');
-    console.log('  ║  GSTIN   : 27AABCD1234E1Z5                           ║');
+    console.log('  ║  Company : MAVIDYA MVG PRADEEP GURU SYSTEM PVT LTD    ║');
+    console.log('  ║  GSTIN   : 07AASCM8531F1Z4                           ║');
     console.log('  ║                                                       ║');
-    console.log('  ║  Branches: MVG Mapusa, MVG Panaji                     ║');
+    console.log('  ║  Branches: MVG Delhi (RO), MVG Satna (Sales)          ║');
     console.log('  ║  Vehicles: 10 (8 in stock, 2 sold)                   ║');
     console.log('  ║  Invoices: 2 confirmed                               ║');
     console.log('  ║  Loans   : 1 overdue                                 ║');
     console.log('  ║  Expenses: 5 sample entries                           ║');
     console.log('  ║                                                       ║');
     console.log('  ╠═══════════════════════════════════════════════════════╣');
-    console.log('  ║  Login Credentials (all use password: Demo@1234)      ║');
+    console.log('  ║  Login credentials (all use password: VehicleERP@2026) ║');
     console.log('  ╠═══════════════════════════════════════════════════════╣');
     console.log('  ║  admin@demo.com    → company_admin                    ║');
     console.log('  ║  manager1@demo.com → branch_manager (MVG Mapusa)      ║');

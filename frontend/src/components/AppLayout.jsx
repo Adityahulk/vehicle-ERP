@@ -217,7 +217,7 @@ function GlobalSearch() {
 }
 
 function MobileDrawer({ open, onClose, user, onLogout }) {
-  const filteredItems = navItemsForRole(user?.role);
+  const filteredItems = navItemsForRole(user?.role, user);
 
   useEffect(() => {
     if (open) document.body.style.overflow = 'hidden';
@@ -318,7 +318,7 @@ export default function AppLayout({ children }) {
             aria-label="Main navigation"
           >
             {(() => {
-              const { primary, overflow } = splitNavForDesktopBar(user?.role);
+              const { primary, overflow } = splitNavForDesktopBar(user?.role, user);
               return (
                 <>
                   <div className="flex items-center gap-0.5 flex-nowrap min-w-0 flex-1 overflow-x-auto overflow-y-visible py-1 -my-1 [scrollbar-width:thin]">

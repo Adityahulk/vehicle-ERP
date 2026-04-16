@@ -284,6 +284,37 @@ export default function QuotationFormPage() {
 
   const totals = computeQuotationTotals(calcLines, interstate, headerDiscType, headerDv);
 
+  const discountValidationError = useMemo(() => {
+    let sumLineTaxable = 0;
+    for (let i = 0; i < calcLines.length; i += 1) {
+      const L = calcLines[i];
+      const qty = L.quantity ?? 1;
+      const gross = L.unit_price * qty;
+      const dt = L.discount_type || 'none';
+      const dv = L.discount_value ?? 0;
+      if (dt === 'flat' && dv > gross) {
+        return `Line ${i + 1}: discount cannot exceed line amount.`;
+      }
+      if (dt === 'percent' && dv > 10000) {
+        return `Line ${i + 1}: discount percent cannot exceed 100%.`;
+      }
+      let lineDisc = 0;
+      if (dt === 'flat') lineDisc = Math.min(dv, gross);
+      else if (dt === 'percent') {
+        lineDisc = Math.round((gross * dv) / 10000);
+        lineDisc = Math.min(lineDisc, gross);
+      }
+      sumLineTaxable += Math.max(0, gross - lineDisc);
+    }
+    if (headerDiscType === 'flat' && headerDv > sumLineTaxable) {
+      return 'Overall discount cannot exceed the taxable subtotal after line discounts.';
+    }
+    if (headerDiscType === 'percent' && headerDv > 10000) {
+      return 'Overall discount percent cannot exceed 100%.';
+    }
+    return null;
+  }, [calcLines, headerDiscType, headerDv]);
+
   const buildPayload = (status = 'draft') => {
     const payload = {
       branch_id: branchId || undefined,
@@ -338,7 +369,11 @@ export default function QuotationFormPage() {
         qc.invalidateQueries({ queryKey: ['quotation', editId] });
       }
     },
-    onError: (e) => toast.error(e.response?.data?.error || 'Save failed'),
+    onError: (e) => {
+      const details = e.response?.data?.details;
+      const first = Array.isArray(details) ? details[0]?.message : null;
+      toast.error(first || e.response?.data?.error || 'Save failed');
+    },
   });
 
   const handleDragEnd = (event) => {
@@ -591,7 +626,18 @@ export default function QuotationFormPage() {
 
       <div className="fixed bottom-0 left-0 right-0 border-t bg-background/95 backdrop-blur py-3 px-4 z-40">
         <div className="max-w-5xl mx-auto flex flex-wrap justify-between gap-2">
-          <Button type="button" variant="ghost" disabled={saveMut.isPending} onClick={() => saveMut.mutate({ status: 'draft' })}>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={saveMut.isPending}
+            onClick={() => {
+              if (discountValidationError) {
+                toast.error(discountValidationError);
+                return;
+              }
+              saveMut.mutate({ status: 'draft' });
+            }}
+          >
             {saveMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
             Save as Draft
           </Button>
@@ -601,6 +647,10 @@ export default function QuotationFormPage() {
               type="button"
               disabled={saveMut.isPending}
               onClick={async () => {
+                if (discountValidationError) {
+                  toast.error(discountValidationError);
+                  return;
+                }
                 try {
                   const saved = await saveMut.mutateAsync({ status: 'draft' });
                   const qid = saved.data?.quotation?.id || editId;

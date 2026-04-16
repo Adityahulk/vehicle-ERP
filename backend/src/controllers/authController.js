@@ -42,8 +42,7 @@ async function login(req, res) {
     `SELECT u.id, u.company_id, u.branch_id, u.name, u.email, u.password_hash,
             u.role, u.phone, u.is_active
      FROM users u
-     WHERE u.email = $1 AND u.is_deleted = FALSE
-     LIMIT 1`,
+     WHERE u.email = $1 AND u.is_deleted = FALSE`,
     [email],
   );
 
@@ -51,14 +50,23 @@ async function login(req, res) {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
-  const user = rows[0];
-
-  if (!user.is_active) {
-    return res.status(403).json({ error: 'Account is deactivated. Contact your administrator.' });
+  let user = null;
+  for (const row of rows) {
+    if (!row.is_active) continue;
+    const validPassword = await bcrypt.compare(password, row.password_hash);
+    if (validPassword) {
+      if (user) {
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+      user = row;
+    }
   }
 
-  const validPassword = await bcrypt.compare(password, user.password_hash);
-  if (!validPassword) {
+  if (!user) {
+    const anyActive = rows.some((r) => r.is_active);
+    if (!anyActive) {
+      return res.status(403).json({ error: 'Account is deactivated. Contact your administrator.' });
+    }
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 

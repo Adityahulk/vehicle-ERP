@@ -53,15 +53,69 @@ const quotationFields = {
 
 const customerRefine = (d) => d.customer_id || (d.customer_name_override && d.customer_phone_override);
 
+/** Enforce discounts ≤ line amount / subtotal (values in paise; percent stored as percent×100). */
+function addQuotationDiscountIssues(d, ctx) {
+  const lines = d.items;
+  let sumLineTaxable = 0;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const qty = line.quantity ?? 1;
+    const gross = line.unit_price * qty;
+    const dt = line.discount_type || 'none';
+    const dv = line.discount_value ?? 0;
+    if (dt === 'flat' && dv > gross) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Line ${i + 1}: discount cannot exceed line amount (₹${(gross / 100).toFixed(2)})`,
+        path: ['items', i, 'discount_value'],
+      });
+    }
+    if (dt === 'percent' && dv > 10000) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Line ${i + 1}: discount percent cannot exceed 100%`,
+        path: ['items', i, 'discount_value'],
+      });
+    }
+    let lineDisc = 0;
+    if (dt === 'flat') lineDisc = Math.min(dv, gross);
+    else if (dt === 'percent') {
+      lineDisc = Math.round((gross * dv) / 10000);
+      lineDisc = Math.min(lineDisc, gross);
+    }
+    sumLineTaxable += Math.max(0, gross - lineDisc);
+  }
+  const ht = d.discount_type || 'flat';
+  const hv = d.discount_value ?? 0;
+  if (ht === 'flat' && hv > sumLineTaxable) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Overall discount cannot exceed taxable subtotal after line discounts (₹${(sumLineTaxable / 100).toFixed(2)})`,
+      path: ['discount_value'],
+    });
+  }
+  if (ht === 'percent' && hv > 10000) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Overall discount percent cannot exceed 100%',
+      path: ['discount_value'],
+    });
+  }
+}
+
 const createQuotationSchema = z.object({
   ...quotationFields,
   status: z.literal('draft').optional().default('draft'),
-}).refine(customerRefine, { message: 'Either customer_id or walk-in name + phone required' });
+})
+  .refine(customerRefine, { message: 'Either customer_id or walk-in name + phone required' })
+  .superRefine(addQuotationDiscountIssues);
 
 const updateQuotationSchema = z.object({
   ...quotationFields,
   status: z.enum(['draft', 'sent']).optional(),
-}).refine(customerRefine, { message: 'Either customer_id or walk-in name + phone required' });
+})
+  .refine(customerRefine, { message: 'Either customer_id or walk-in name + phone required' })
+  .superRefine(addQuotationDiscountIssues);
 
 const previewBodySchema = createQuotationSchema;
 
@@ -75,7 +129,6 @@ router.get('/', qRead, qc.listQuotations);
 
 router.get('/:id/pdf', qRead, qc.getQuotationPdf);
 router.get('/:id/preview-html', qRead, qc.getQuotationPreviewHtml);
-router.get('/:id/share-link', qRead, qc.shareQuotationLink);
 
 router.post('/:id/send', ...qWrite, qc.sendQuotation);
 router.post('/:id/accept', ...qWrite, qc.acceptQuotation);

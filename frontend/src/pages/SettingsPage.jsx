@@ -543,8 +543,7 @@ function UsersTab() {
                       </td>
                       <td className="py-2 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {empByUserId[u.id] &&
-                            !['company_admin', 'super_admin'].includes(u.role) && (
+                          {!['company_admin', 'super_admin'].includes(u.role) && (
                             <Button variant="outline" size="sm" className="h-8 px-2 text-xs gap-1" asChild>
                               <Link to={`/employees/${u.id}`}>
                                 <UserCircle className="h-3.5 w-3.5" /> Profile
@@ -597,10 +596,40 @@ function UsersTab() {
             <p className="text-xs text-muted-foreground">Share this password with the user. They should change it after logging in.</p>
           </div>
           <DialogFooter>
-            <Button onClick={() => {
-              navigator.clipboard.writeText(resetResult?.temp_password || '');
-              setResetResult(null);
-            }}>
+            <Button
+              type="button"
+              onClick={async () => {
+                const text = resetResult?.temp_password || '';
+                if (!text) {
+                  setResetResult(null);
+                  return;
+                }
+                try {
+                  if (navigator.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(text);
+                  } else {
+                    throw new Error('clipboard');
+                  }
+                } catch {
+                  try {
+                    const ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.setAttribute('readonly', '');
+                    ta.style.position = 'fixed';
+                    ta.style.left = '-9999px';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                  } catch {
+                    toast.error('Could not copy automatically — select the password and copy it.');
+                    return;
+                  }
+                }
+                toast.success('Password copied');
+                setResetResult(null);
+              }}
+            >
               Copy & Close
             </Button>
           </DialogFooter>
@@ -617,6 +646,10 @@ function UsersTab() {
             className="space-y-4 max-h-[85vh] overflow-y-auto pr-1"
             onSubmit={(e) => {
               e.preventDefault();
+              if (['branch_manager', 'staff'].includes(addForm.role) && !addForm.branch_id) {
+                toast.error('Select a branch for branch managers and staff');
+                return;
+              }
               if (addForm.role !== 'ca') {
                 if (!addForm.designation?.trim()) {
                   toast.error('Designation is required');
@@ -693,13 +726,18 @@ function UsersTab() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Branch</Label>
+                <Label>
+                  Branch
+                  {['branch_manager', 'staff'].includes(addForm.role) ? ' *' : ''}
+                </Label>
                 <Select value={addForm.branch_id} onValueChange={(v) => setAddForm((p) => ({ ...p, branch_id: v }))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select branch" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    {!['branch_manager', 'staff'].includes(addForm.role) ? (
+                      <SelectItem value="">None</SelectItem>
+                    ) : null}
                     {(branches || []).map((b) => (
                       <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
                     ))}
