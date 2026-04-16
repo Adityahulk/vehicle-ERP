@@ -42,23 +42,24 @@ async function nextEmployeeCode(companyId, branchCode) {
 }
 
 async function assertCanViewProfile(req, targetUserId) {
-  const { id: callerId, company_id: companyId, role, branch_id: myBranch } = req.user;
+  const { id: callerId, company_id: companyId, role } = req.user;
 
   const { rows } = await query(
-    `SELECT id, branch_id, company_id FROM users WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
+    `SELECT id, branch_id, company_id, role AS user_role FROM users WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
     [targetUserId, companyId],
   );
   if (rows.length === 0) return { error: 'User not found', status: 404 };
   const target = rows[0];
+
+  if (['company_admin', 'super_admin'].includes(target.user_role)) {
+    return { error: 'User not found', status: 404 };
+  }
 
   if (['company_admin', 'super_admin'].includes(role)) {
     return { target, mode: 'admin' };
   }
   if (callerId === targetUserId) {
     return { target, mode: 'self' };
-  }
-  if (role === 'branch_manager' && target.branch_id && String(target.branch_id) === String(myBranch)) {
-    return { target, mode: 'manager' };
   }
   return { error: 'Not allowed', status: 403 };
 }
@@ -72,13 +73,16 @@ async function createEmployee(req, res) {
     if (!userId) return res.status(400).json({ error: 'user_id is required' });
 
     const { rows: urows } = await query(
-      `SELECT u.id, u.branch_id, b.code AS branch_code
+      `SELECT u.id, u.branch_id, u.role, b.code AS branch_code
        FROM users u
        LEFT JOIN branches b ON b.id = u.branch_id
        WHERE u.id = $1 AND u.company_id = $2 AND u.is_deleted = FALSE`,
       [userId, companyId],
     );
     if (urows.length === 0) return res.status(404).json({ error: 'User not found' });
+    if (['company_admin', 'super_admin'].includes(urows[0].role)) {
+      return res.status(400).json({ error: 'Employee profiles are not used for company admins' });
+    }
 
     const existing = await query(
       `SELECT id FROM employee_profiles WHERE user_id = $1`,
@@ -150,6 +154,8 @@ async function listEmployees(req, res) {
     const cond = ['u.company_id = $1', 'u.is_deleted = FALSE', 'ep.id IS NOT NULL'];
     const params = [companyId];
     let idx = 2;
+
+    cond.push(`u.role NOT IN ('company_admin', 'super_admin')`);
 
     if (role === 'branch_manager') {
       cond.push(`u.branch_id = $${idx++}`);
@@ -236,8 +242,7 @@ async function getEmployee(req, res) {
     if (eprows.length === 0) return res.status(404).json({ error: 'No employee profile for this user' });
 
     let ep = eprows[0];
-    const isCompanyAdmin = ['company_admin', 'super_admin'].includes(req.user.role);
-    const redactMode = isCompanyAdmin ? 'admin' : 'limited';
+    const redactMode = check.mode === 'admin' ? 'admin' : 'limited';
     ep = redactProfileRow(ep, redactMode);
 
     const { rows: history } = await query(
@@ -261,6 +266,15 @@ async function patchEmployee(req, res) {
     const { userId } = req.params;
     const companyId = req.user.company_id;
     const d = req.body;
+
+    const { rows: roleRows } = await query(
+      `SELECT role FROM users WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
+      [userId, companyId],
+    );
+    if (roleRows.length === 0) return res.status(404).json({ error: 'User not found' });
+    if (['company_admin', 'super_admin'].includes(roleRows[0].role)) {
+      return res.status(404).json({ error: 'Employee profile not found' });
+    }
 
     const { rows: eprows } = await query(
       `SELECT * FROM employee_profiles WHERE user_id = $1 AND company_id = $2`,
@@ -352,6 +366,15 @@ async function salaryHistory(req, res) {
     const { userId } = req.params;
     const companyId = req.user.company_id;
 
+    const { rows: roleRows } = await query(
+      `SELECT role FROM users WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
+      [userId, companyId],
+    );
+    if (roleRows.length === 0) return res.status(404).json({ error: 'User not found' });
+    if (['company_admin', 'super_admin'].includes(roleRows[0].role)) {
+      return res.status(404).json({ error: 'Employee profile not found' });
+    }
+
     const { rows: eprows } = await query(
       `SELECT id FROM employee_profiles WHERE user_id = $1 AND company_id = $2`,
       [userId, companyId],
@@ -380,6 +403,15 @@ async function resignEmployee(req, res) {
     const { resigned_at, resignation_reason } = req.body;
 
     if (!resigned_at) return res.status(400).json({ error: 'resigned_at is required' });
+
+    const { rows: roleRows } = await query(
+      `SELECT role FROM users WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
+      [userId, companyId],
+    );
+    if (roleRows.length === 0) return res.status(404).json({ error: 'User not found' });
+    if (['company_admin', 'super_admin'].includes(roleRows[0].role)) {
+      return res.status(404).json({ error: 'Employee profile not found' });
+    }
 
     const { rows: eprows } = await query(
       `SELECT id FROM employee_profiles WHERE user_id = $1 AND company_id = $2`,

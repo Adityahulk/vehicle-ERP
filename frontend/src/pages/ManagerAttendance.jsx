@@ -274,7 +274,7 @@ function MonthlyTab({ branchId }) {
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `attendance_${branchId}_${y}_${m}.csv`;
+    a.download = `attendance_${branchId === 'all' ? 'all' : branchId}_${y}_${m}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -384,10 +384,13 @@ function LeaveRequestsTab({ branchId }) {
   const { data: staffUsers } = useQuery({
     queryKey: ['users-for-leave-filter', branchId, isCompanyAdmin],
     queryFn: () => {
-      const url = isCompanyAdmin
-        ? `/users?branch_id=${branchId}&limit=200`
-        : '/users?limit=200';
-      return api.get(url).then((r) => r.data.users);
+      if (isCompanyAdmin && branchId === 'all') {
+        return api.get('/users?limit=200').then((r) => r.data.users);
+      }
+      if (isCompanyAdmin) {
+        return api.get(`/users?branch_id=${branchId}&limit=200`).then((r) => r.data.users);
+      }
+      return api.get('/users?limit=200').then((r) => r.data.users);
     },
     enabled: showAll && !!branchId,
   });
@@ -567,17 +570,13 @@ export default function ManagerAttendance() {
   const [branchId, setBranchId] = useState('');
 
   useEffect(() => {
-    const fromUrl = searchParams.get('branch_id');
-    if (fromUrl && fromUrl !== branchId) {
-      setBranchId(fromUrl);
+    if (isAdmin) {
+      const fromUrl = searchParams.get('branch_id');
+      setBranchId(fromUrl || 'all');
+    } else if (user?.branch_id) {
+      setBranchId(user.branch_id);
     }
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (branchId) return;
-    if (user?.branch_id) setBranchId(user.branch_id);
-    else if (branches?.length) setBranchId(branches[0].id);
-  }, [user?.branch_id, branches, branchId]);
+  }, [isAdmin, user?.branch_id, searchParams]);
 
   const { data: pendingList } = useQuery({
     queryKey: ['leave-pending', branchId],
@@ -600,6 +599,7 @@ export default function ManagerAttendance() {
               onChange={(e) => setBranchId(e.target.value)}
               className="max-w-sm"
             >
+              <option value="all">All branches</option>
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}

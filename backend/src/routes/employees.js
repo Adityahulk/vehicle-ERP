@@ -65,13 +65,13 @@ router.get(
 
 router.get(
   '/:userId/attendance-summary',
-  requireMinRole('branch_manager'),
+  requireMinRole('staff'),
   ec.attendanceSummary,
 );
 
 router.get(
   '/:userId/leave-balances',
-  requireMinRole('branch_manager'),
+  requireMinRole('staff'),
   ec.leaveBalancesForEmployee,
 );
 

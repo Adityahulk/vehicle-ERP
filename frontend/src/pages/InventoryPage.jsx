@@ -66,6 +66,7 @@ function AddVehicleSheet({ open, onOpenChange, branches }) {
   const [error, setError] = useState('');
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const branchPickerLocked = user?.role === 'branch_manager' || user?.role === 'staff';
 
   useEffect(() => {
     if (open) {
@@ -146,12 +147,20 @@ function AddVehicleSheet({ open, onOpenChange, branches }) {
             </div>
             <div className="space-y-1">
               <Label>Branch</Label>
-              <Select value={form.branch_id} onChange={set('branch_id')}>
-                <option value="">Select</option>
-                {branches?.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </Select>
+              {branchPickerLocked ? (
+                <Input
+                  readOnly
+                  className="bg-muted/50"
+                  value={branches?.find((b) => b.id === form.branch_id)?.name || '—'}
+                />
+              ) : (
+                <Select value={form.branch_id} onChange={set('branch_id')}>
+                  <option value="">Select</option>
+                  {branches?.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </Select>
+              )}
             </div>
           </div>
 
@@ -270,8 +279,14 @@ export default function InventoryPage() {
 
   const [filters, setFilters] = useState({ page: 1, limit: 25, branch_id: '', status: '', search: '' });
   const [searchInput, setSearchInput] = useState('');
+  const branchFilterLocked = user?.role === 'branch_manager' || user?.role === 'staff';
 
   const { data: branches } = useBranches();
+
+  useEffect(() => {
+    if (!branchFilterLocked || !user?.branch_id) return;
+    setFilters((f) => ({ ...f, page: 1, branch_id: user.branch_id }));
+  }, [branchFilterLocked, user?.branch_id]);
   const { data, isLoading } = useVehicles(
     Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')),
   );
@@ -355,16 +370,18 @@ export default function InventoryPage() {
             onChange={(e) => setSearchInput(e.target.value)}
           />
         </div>
-        <Select
-          className="w-44"
-          value={filters.branch_id}
-          onChange={(e) => setFilters((f) => ({ ...f, page: 1, branch_id: e.target.value }))}
-        >
-          <option value="">All Branches</option>
-          {branches?.map((b) => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </Select>
+        {!branchFilterLocked && (
+          <Select
+            className="w-44"
+            value={filters.branch_id}
+            onChange={(e) => setFilters((f) => ({ ...f, page: 1, branch_id: e.target.value }))}
+          >
+            <option value="">All Branches</option>
+            {branches?.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </Select>
+        )}
         <Select
           className="w-40"
           value={filters.status}

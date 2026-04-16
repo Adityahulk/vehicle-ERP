@@ -105,6 +105,7 @@ export default function QuotationFormPage() {
   const [quotationDate, setQuotationDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [validUntil, setValidUntil] = useState(() => addDaysISO(30));
   const [branchId, setBranchId] = useState(user?.branch_id || '');
+  const branchPickerLocked = user?.role === 'branch_manager';
 
   const [notes, setNotes] = useState('');
   const [customerNotes, setCustomerNotes] = useState('');
@@ -121,6 +122,12 @@ export default function QuotationFormPage() {
     queryKey: ['branches'],
     queryFn: () => api.get('/branches').then((r) => r.data.branches),
   });
+
+  useEffect(() => {
+    if (branchPickerLocked && user?.branch_id) {
+      setBranchId(user.branch_id);
+    }
+  }, [branchPickerLocked, user?.branch_id]);
 
   const { data: company } = useQuery({
     queryKey: ['company', user?.company_id],
@@ -544,12 +551,20 @@ export default function QuotationFormPage() {
                 <div><Label>Prepared by</Label><Input readOnly value={user?.name || user?.email || ''} className="bg-muted/50" /></div>
                 <div>
                   <Label>Branch</Label>
-                  <Select value={branchId} onChange={(e) => setBranchId(e.target.value)}>
-                    <option value="">Select branch…</option>
-                    {(branches || []).map((b) => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                  </Select>
+                  {branchPickerLocked ? (
+                    <Input
+                      readOnly
+                      className="bg-muted/50"
+                      value={(branches || []).find((b) => b.id === branchId)?.name || '—'}
+                    />
+                  ) : (
+                    <Select value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+                      <option value="">Select branch…</option>
+                      {(branches || []).map((b) => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </Select>
+                  )}
                 </div>
               </CardContent>
             </Card>

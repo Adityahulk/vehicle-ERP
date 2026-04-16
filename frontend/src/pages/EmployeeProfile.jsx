@@ -70,6 +70,7 @@ export default function EmployeeProfile() {
   const { user: auth } = useAuthStore();
   const qc = useQueryClient();
   const isAdmin = ['company_admin', 'super_admin'].includes(auth?.role);
+  const profileAllowed = isAdmin || auth?.id === userId;
   const [salaryOpen, setSalaryOpen] = useState(false);
   const [salaryForm, setSalaryForm] = useState({ annual_salary: '', salary_effective_date: '', salary_change_reason: '' });
   const [resignOpen, setResignOpen] = useState(false);
@@ -79,19 +80,19 @@ export default function EmployeeProfile() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['employee-profile', userId],
     queryFn: () => api.get(`/employees/${userId}`).then((r) => r.data),
-    enabled: !!userId,
+    enabled: !!userId && profileAllowed,
   });
 
   const attQuery = useQuery({
     queryKey: ['employee-attendance-summary', userId],
     queryFn: () => api.get(`/employees/${userId}/attendance-summary`).then((r) => r.data),
-    enabled: !!userId && !!data,
+    enabled: !!userId && profileAllowed && !!data,
   });
 
   const leaveQuery = useQuery({
     queryKey: ['employee-leave-balances', userId],
     queryFn: () => api.get(`/employees/${userId}/leave-balances`).then((r) => r.data),
-    enabled: !!userId && !!data,
+    enabled: !!userId && profileAllowed && !!data,
   });
 
   const profile = data?.profile;
@@ -127,7 +128,7 @@ export default function EmployeeProfile() {
     onError: (e) => toast.error(e.response?.data?.error || 'Failed'),
   });
 
-  if (auth?.role === 'staff' && auth.id !== userId) {
+  if (!profileAllowed) {
     return <Navigate to="/unauthorized" replace />;
   }
 

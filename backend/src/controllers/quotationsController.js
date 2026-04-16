@@ -335,7 +335,10 @@ async function createQuotation(req, res) {
   const company_id = req.user.company_id;
   const user_id = req.user.id;
   const body = req.validated;
-  const branch_id = body.branch_id || req.user.branch_id;
+  let branch_id = body.branch_id || req.user.branch_id;
+  if (req.user.role === 'branch_manager') {
+    branch_id = req.user.branch_id;
+  }
   if (!branch_id) return res.status(400).json({ error: 'branch_id required' });
 
   const comp = await fetchCompanyRow(company_id);
@@ -474,7 +477,13 @@ async function updateQuotation(req, res) {
     return res.status(400).json({ error: 'Only draft or sent quotations can be updated' });
   }
 
-  const branch_id = body.branch_id || cur[0].branch_id;
+  let branch_id = body.branch_id != null ? body.branch_id : cur[0].branch_id;
+  if (req.user.role === 'branch_manager') {
+    branch_id = cur[0].branch_id;
+    if (body.branch_id != null && String(body.branch_id) !== String(cur[0].branch_id)) {
+      return res.status(403).json({ error: 'Cannot change branch' });
+    }
+  }
   const comp = await fetchCompanyRow(company_id);
   const custGst = await fetchCustomerGstin(body.customer_id, company_id);
   const interstate = resolveInterstate(comp.gstin, custGst);
@@ -820,9 +829,11 @@ async function previewQuotationHtmlFromBody(req, res) {
     terms_and_conditions: body.terms_and_conditions || DEFAULT_TERMS,
   };
 
+  const previewBranchId =
+    req.user.role === 'branch_manager' ? req.user.branch_id : (body.branch_id || req.user.branch_id);
   const { rows: br } = await query(
     `SELECT name, address, phone FROM branches WHERE id = $1 AND company_id = $2`,
-    [body.branch_id || req.user.branch_id, company_id],
+    [previewBranchId, company_id],
   );
 
   const customer = body.customer_id

@@ -23,6 +23,25 @@ const branchSchema = z.object({
 // List branches with manager name
 router.get('/', async (req, res) => {
   const company_id = req.user.company_id;
+  const { role, branch_id: myBranch } = req.user;
+
+  if (role === 'branch_manager' || role === 'staff') {
+    if (!myBranch) {
+      return res.json({ branches: [] });
+    }
+    const { rows } = await query(
+      `SELECT b.id, b.name, b.address, b.phone, b.manager_id,
+              b.city, b.state, b.pincode, b.state_code,
+              u.name AS manager_name, u.email AS manager_email
+       FROM branches b
+       LEFT JOIN users u ON u.id = b.manager_id AND u.is_deleted = FALSE
+       WHERE b.company_id = $1 AND b.id = $2 AND b.is_deleted = FALSE
+       ORDER BY b.name`,
+      [company_id, myBranch],
+    );
+    return res.json({ branches: rows });
+  }
+
   const { rows } = await query(
     `SELECT b.id, b.name, b.address, b.phone, b.manager_id,
             b.city, b.state, b.pincode, b.state_code,

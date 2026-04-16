@@ -186,16 +186,30 @@ function workStatusForTodayRow(u) {
 
 async function todayByBranch(req, res) {
   try {
-    const { company_id, role: callerRole, id: callerId } = req.user;
+    const { company_id, role: callerRole, id: callerId, branch_id: myBranch } = req.user;
     const { branchId } = req.params;
     const today = istYmd();
+    const isAll = branchId === 'all';
 
-    const branchCheck = await query(
-      `SELECT id FROM branches WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
-      [branchId, company_id],
-    );
-    if (branchCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Branch not found' });
+    if (callerRole === 'branch_manager') {
+      if (isAll) return res.status(403).json({ error: 'Not allowed' });
+      if (String(branchId) !== String(myBranch)) {
+        return res.status(403).json({ error: 'Not your branch' });
+      }
+    }
+
+    if (isAll && !['company_admin', 'super_admin'].includes(callerRole)) {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
+
+    if (!isAll) {
+      const branchCheck = await query(
+        `SELECT id FROM branches WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
+        [branchId, company_id],
+      );
+      if (branchCheck.rows.length === 0) {
+        return res.status(404).json({ error: 'Branch not found' });
+      }
     }
 
     if (callerRole === 'staff') {
@@ -225,16 +239,32 @@ async function todayByBranch(req, res) {
 
     const allowedRoles = VISIBLE_ROLES[callerRole] || [];
 
-    const { rows: branchUsers } = await query(
-      `SELECT u.id, u.name, u.role,
-              a.clock_in, a.clock_out, a.status, a.date, a.id AS attendance_id
-       FROM users u
-       LEFT JOIN attendance a ON a.user_id = u.id AND a.date = $3::date AND a.is_deleted = FALSE
-       WHERE u.branch_id = $1 AND u.company_id = $2 AND u.is_deleted = FALSE AND u.is_active = TRUE
-         AND u.role = ANY($4)
-       ORDER BY a.clock_in ASC NULLS LAST, u.name`,
-      [branchId, company_id, today, allowedRoles],
-    );
+    let branchUsers;
+    if (isAll) {
+      const qAll = await query(
+        `SELECT u.id, u.name, u.role,
+                a.clock_in, a.clock_out, a.status, a.date, a.id AS attendance_id
+         FROM users u
+         LEFT JOIN attendance a ON a.user_id = u.id AND a.date = $2::date AND a.is_deleted = FALSE
+         WHERE u.company_id = $1 AND u.is_deleted = FALSE AND u.is_active = TRUE
+           AND u.role = ANY($3)
+         ORDER BY u.branch_id NULLS LAST, a.clock_in ASC NULLS LAST, u.name`,
+        [company_id, today, allowedRoles],
+      );
+      branchUsers = qAll.rows;
+    } else {
+      const qB = await query(
+        `SELECT u.id, u.name, u.role,
+                a.clock_in, a.clock_out, a.status, a.date, a.id AS attendance_id
+         FROM users u
+         LEFT JOIN attendance a ON a.user_id = u.id AND a.date = $3::date AND a.is_deleted = FALSE
+         WHERE u.branch_id = $1 AND u.company_id = $2 AND u.is_deleted = FALSE AND u.is_active = TRUE
+           AND u.role = ANY($4)
+         ORDER BY a.clock_in ASC NULLS LAST, u.name`,
+        [branchId, company_id, today, allowedRoles],
+      );
+      branchUsers = qB.rows;
+    }
 
     const users = branchUsers.map((u) => ({
       ...u,
@@ -442,20 +472,31 @@ async function branchMonthly(req, res) {
   try {
     const { company_id: companyId, role: callerRole, branch_id: myBranch } = req.user;
     const { branchId } = req.params;
+    const isAll = branchId === 'all';
 
     if (!['branch_manager', 'company_admin', 'super_admin'].includes(callerRole)) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
-    if (callerRole === 'branch_manager' && branchId !== myBranch) {
-      return res.status(403).json({ error: 'Not your branch' });
+
+    if (callerRole === 'branch_manager') {
+      if (isAll) return res.status(403).json({ error: 'Not allowed' });
+      if (String(branchId) !== String(myBranch)) {
+        return res.status(403).json({ error: 'Not your branch' });
+      }
     }
 
-    const branchCheck = await query(
-      `SELECT id FROM branches WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
-      [branchId, companyId],
-    );
-    if (branchCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Branch not found' });
+    if (isAll && !['company_admin', 'super_admin'].includes(callerRole)) {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
+
+    if (!isAll) {
+      const branchCheck = await query(
+        `SELECT id FROM branches WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
+        [branchId, companyId],
+      );
+      if (branchCheck.rows.length === 0) {
+        return res.status(404).json({ error: 'Branch not found' });
+      }
     }
 
     const now = new Date();
@@ -466,27 +507,59 @@ async function branchMonthly(req, res) {
     const { first, last } = monthBounds(year, month);
     const allowedRoles = VISIBLE_ROLES[callerRole] || [];
 
-    const { rows: staffRows } = await query(
-      `SELECT u.id, u.name, u.role FROM users u
-       WHERE u.branch_id = $1 AND u.company_id = $2 AND u.is_deleted = FALSE AND u.is_active = TRUE
-         AND u.role = ANY($3)
-       ORDER BY u.name`,
-      [branchId, companyId, allowedRoles],
-    );
+    let staffRows;
+    if (isAll) {
+      const qStaff = await query(
+        `SELECT u.id, u.name, u.role FROM users u
+         WHERE u.company_id = $1 AND u.is_deleted = FALSE AND u.is_active = TRUE
+           AND u.role = ANY($2)
+         ORDER BY u.branch_id NULLS LAST, u.name`,
+        [companyId, allowedRoles],
+      );
+      staffRows = qStaff.rows;
+    } else {
+      const qStaff = await query(
+        `SELECT u.id, u.name, u.role FROM users u
+         WHERE u.branch_id = $1 AND u.company_id = $2 AND u.is_deleted = FALSE AND u.is_active = TRUE
+           AND u.role = ANY($3)
+         ORDER BY u.name`,
+        [branchId, companyId, allowedRoles],
+      );
+      staffRows = qStaff.rows;
+    }
 
-    const { rows: attRows } = await query(
-      `SELECT a.user_id, a.date, a.clock_in, a.clock_out, a.status,
-              CASE WHEN a.clock_out IS NOT NULL AND a.clock_in IS NOT NULL
-                THEN ROUND(EXTRACT(EPOCH FROM (a.clock_out - a.clock_in)) / 3600.0, 2)
-                ELSE NULL
-              END AS hours_worked
-       FROM attendance a
-       JOIN users u ON u.id = a.user_id
-       WHERE a.company_id = $1 AND a.branch_id = $2 AND a.is_deleted = FALSE
-         AND a.date >= $3::date AND a.date <= $4::date
-         AND u.role = ANY($5)`,
-      [companyId, branchId, first, last, allowedRoles],
-    );
+    let attRows;
+    if (isAll) {
+      const qAtt = await query(
+        `SELECT a.user_id, a.date, a.clock_in, a.clock_out, a.status,
+                CASE WHEN a.clock_out IS NOT NULL AND a.clock_in IS NOT NULL
+                  THEN ROUND(EXTRACT(EPOCH FROM (a.clock_out - a.clock_in)) / 3600.0, 2)
+                  ELSE NULL
+                END AS hours_worked
+         FROM attendance a
+         JOIN users u ON u.id = a.user_id
+         WHERE a.company_id = $1 AND a.is_deleted = FALSE
+           AND a.date >= $2::date AND a.date <= $3::date
+           AND u.company_id = $1 AND u.role = ANY($4)`,
+        [companyId, first, last, allowedRoles],
+      );
+      attRows = qAtt.rows;
+    } else {
+      const qAtt = await query(
+        `SELECT a.user_id, a.date, a.clock_in, a.clock_out, a.status,
+                CASE WHEN a.clock_out IS NOT NULL AND a.clock_in IS NOT NULL
+                  THEN ROUND(EXTRACT(EPOCH FROM (a.clock_out - a.clock_in)) / 3600.0, 2)
+                  ELSE NULL
+                END AS hours_worked
+         FROM attendance a
+         JOIN users u ON u.id = a.user_id
+         WHERE a.company_id = $1 AND a.branch_id = $2 AND a.is_deleted = FALSE
+           AND a.date >= $3::date AND a.date <= $4::date
+           AND u.role = ANY($5)`,
+        [companyId, branchId, first, last, allowedRoles],
+      );
+      attRows = qAtt.rows;
+    }
 
     const byUser = {};
     for (const r of attRows) {
@@ -497,16 +570,32 @@ async function branchMonthly(req, res) {
       byUser[uid][ds] = r;
     }
 
-    const { rows: leaveRows } = await query(
-      `SELECT la.user_id, la.from_date, la.to_date
-       FROM leave_applications la
-       JOIN users u ON u.id = la.user_id
-       WHERE la.company_id = $1 AND la.is_deleted = FALSE AND la.status = 'approved'
-         AND u.branch_id = $2 AND u.is_deleted = FALSE AND u.is_active = TRUE
-         AND u.role = ANY($5)
-         AND la.from_date <= $4::date AND la.to_date >= $3::date`,
-      [companyId, branchId, first, last, allowedRoles],
-    );
+    let leaveRows;
+    if (isAll) {
+      const qLeave = await query(
+        `SELECT la.user_id, la.from_date, la.to_date
+         FROM leave_applications la
+         JOIN users u ON u.id = la.user_id
+         WHERE la.company_id = $1 AND la.is_deleted = FALSE AND la.status = 'approved'
+           AND u.company_id = $1 AND u.is_deleted = FALSE AND u.is_active = TRUE
+           AND u.role = ANY($4)
+           AND la.from_date <= $3::date AND la.to_date >= $2::date`,
+        [companyId, first, last, allowedRoles],
+      );
+      leaveRows = qLeave.rows;
+    } else {
+      const qLeave = await query(
+        `SELECT la.user_id, la.from_date, la.to_date
+         FROM leave_applications la
+         JOIN users u ON u.id = la.user_id
+         WHERE la.company_id = $1 AND la.is_deleted = FALSE AND la.status = 'approved'
+           AND u.branch_id = $2 AND u.is_deleted = FALSE AND u.is_active = TRUE
+           AND u.role = ANY($5)
+           AND la.from_date <= $4::date AND la.to_date >= $3::date`,
+        [companyId, branchId, first, last, allowedRoles],
+      );
+      leaveRows = qLeave.rows;
+    }
 
     for (const la of leaveRows) {
       const uid = la.user_id;
@@ -567,7 +656,7 @@ async function regularize(req, res) {
     if (targetRows.length === 0) return res.status(404).json({ error: 'User not found' });
     const target = targetRows[0];
 
-    if (role === 'branch_manager' && target.branch_id !== myBranch) {
+    if (role === 'branch_manager' && String(target.branch_id || '') !== String(myBranch || '')) {
       return res.status(403).json({ error: 'User is not in your branch' });
     }
 

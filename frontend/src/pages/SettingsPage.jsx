@@ -543,7 +543,8 @@ function UsersTab() {
                       </td>
                       <td className="py-2 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {empByUserId[u.id] && (
+                          {empByUserId[u.id] &&
+                            !['company_admin', 'super_admin'].includes(u.role) && (
                             <Button variant="outline" size="sm" className="h-8 px-2 text-xs gap-1" asChild>
                               <Link to={`/employees/${u.id}`}>
                                 <UserCircle className="h-3.5 w-3.5" /> Profile
