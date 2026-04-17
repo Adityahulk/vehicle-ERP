@@ -529,25 +529,32 @@ export default function MyAttendance() {
         <h2 className="text-2xl font-semibold">Attendance</h2>
         <p className="text-sm text-muted-foreground">
           {isCompanyAdmin
-            ? 'View your month and manage leave. Personal clock-in/out is not used for company admins — use Team attendance for staff.'
+            ? 'View your month below. Personal clock-in/out is not used for company admins — use Team attendance for staff.'
             : 'Clock in/out, view your month, and manage leave. Admins review everyone under Team attendance.'}
         </p>
       </div>
 
       <div className="max-w-3xl space-y-6">
-        <Tabs defaultValue="attendance">
-          <TabsList>
-            <TabsTrigger value="attendance">Attendance</TabsTrigger>
-            <TabsTrigger value="leaves">My Leaves</TabsTrigger>
-          </TabsList>
-          <TabsContent value="attendance" className="space-y-6">
+        {isCompanyAdmin ? (
+          <div className="space-y-6">
             <ClockSection />
             <MiniCalendar />
-          </TabsContent>
-          <TabsContent value="leaves">
-            <LeavesTab />
-          </TabsContent>
-        </Tabs>
+          </div>
+        ) : (
+          <Tabs defaultValue="attendance">
+            <TabsList>
+              <TabsTrigger value="attendance">Attendance</TabsTrigger>
+              <TabsTrigger value="leaves">My Leaves</TabsTrigger>
+            </TabsList>
+            <TabsContent value="attendance" className="space-y-6">
+              <ClockSection />
+              <MiniCalendar />
+            </TabsContent>
+            <TabsContent value="leaves">
+              <LeavesTab />
+            </TabsContent>
+          </Tabs>
+        )}
       </div>
     </AppLayout>
   );

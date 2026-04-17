@@ -205,9 +205,10 @@ async function seed() {
       [companyId, panaji.id, hash],
     );
 
-    await client.query(
+    const { rows: [caUser] } = await client.query(
       `INSERT INTO users (company_id, branch_id, name, email, password_hash, phone, role)
-       VALUES ($1, NULL, 'CA Ramesh Pai', 'ca@demo.com', $2, '9876543216', 'ca')`,
+       VALUES ($1, NULL, 'CA Ramesh Pai', 'ca@demo.com', $2, '9876543216', 'ca')
+       RETURNING id`,
       [companyId, hash],
     );
 
@@ -231,9 +232,21 @@ async function seed() {
          ($1, $4, 'EMP-MAP-003', 'Sales Executive', 'Sales',
           (CURRENT_DATE - INTERVAL '1 year')::date, 'full_time',
           ((CURRENT_DATE - INTERVAL '1 year')::date + INTERVAL '90 days')::date,
-          24000000, 'monthly')
+          24000000, 'monthly'),
+         ($1, $5, 'EMP-STN-001', 'Branch Manager', 'Management',
+          (CURRENT_DATE - INTERVAL '2 years')::date, 'full_time',
+          ((CURRENT_DATE - INTERVAL '2 years')::date + INTERVAL '90 days')::date,
+          54000000, 'monthly'),
+         ($1, $6, 'EMP-STN-002', 'Sales Executive', 'Sales',
+          (CURRENT_DATE - INTERVAL '1 year')::date, 'full_time',
+          ((CURRENT_DATE - INTERVAL '1 year')::date + INTERVAL '90 days')::date,
+          24000000, 'monthly'),
+         ($1, $7, 'EMP-CA-001', 'Consultant', 'Finance',
+          (CURRENT_DATE - INTERVAL '4 years')::date, 'full_time',
+          ((CURRENT_DATE - INTERVAL '4 years')::date + INTERVAL '90 days')::date,
+          120000000, 'monthly')
        RETURNING id, employee_code`,
-      [companyId, adminUser.id, manager1.id, staff1.id],
+      [companyId, adminUser.id, manager1.id, staff1.id, manager2.id, staff2.id, caUser.id],
     );
     const mgrProfile = epInserted.find((r) => r.employee_code === 'EMP-MAP-002');
     await client.query(

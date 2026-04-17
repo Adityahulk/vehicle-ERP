@@ -35,7 +35,6 @@ export const NAV_CONFIG = {
     { label: 'Loans', path: '/loans', icon: 'Landmark' },
     { label: 'Expenses', path: '/expenses', icon: 'Receipt' },
     { label: 'Reports', path: '/reports', icon: 'BarChart2' },
-    { label: 'My leave', path: '/my-attendance', icon: 'CalendarDays' },
     { label: 'Team attendance', path: '/attendance', icon: 'Users' },
     { label: 'Settings', path: '/settings', icon: 'Settings' },
   ],
@@ -92,7 +91,7 @@ export function navItemsForRole(role, user = null) {
 
 /** Desktop top bar: keep a short primary row; rest go under "More" (reduces clutter). */
 const DESKTOP_PRIMARY_PATHS = {
-  company_admin: ['/dashboard', '/inventory', '/sales', '/my-attendance', '/attendance'],
+  company_admin: ['/dashboard', '/inventory', '/sales', '/attendance'],
   branch_manager: ['/branch-dashboard', '/inventory', '/sales', '/my-attendance', '/attendance'],
 };
 
