@@ -8,6 +8,7 @@ try {
 const bcrypt = require('bcryptjs');
 const { pool } = require('../config/db');
 const { seedDefaultLeaveTypes } = require('../services/leaveTypesService');
+const { seedWhatsappTemplates } = require('../services/whatsappTemplatesSeed');
 const { workingDatesInRange } = require('../controllers/attendanceLeaveController');
 
 const DEMO_PASSWORD = 'VehicleERP@2026';
@@ -23,6 +24,24 @@ const VEHICLE_DATA = [
   { chassis: 'MAKE3CC3CCC890123', engine: '2NRF8901234', make: 'Toyota', model: 'Innova Crysta', variant: 'GX 8S', color: 'Super White', year: 2024, purchase: 195000000, selling: 210000000 },
   { chassis: 'MH1KC1CDXPP901234', engine: 'KC15E9012345', make: 'Honda', model: 'City', variant: 'ZX CVT', color: 'Platinum White Pearl', year: 2025, purchase: 140000000, selling: 152900000 },
   { chassis: 'MH1RV1CE1PP012345', engine: 'L15BG012345', make: 'Honda', model: 'Elevate', variant: 'ZX CVT', color: 'Golden Brown', year: 2025, purchase: 155000000, selling: 167900000 },
+  { chassis: 'MA3XZE81S01111222', engine: 'K12AA1112223', make: 'Maruti Suzuki', model: 'Dzire', variant: 'ZXI+', color: 'Pearl Midnight Black', year: 2024, purchase: 68000000, selling: 72900000 },
+  { chassis: 'MA3XZF91S02222333', engine: 'K12BB2223334', make: 'Maruti Suzuki', model: 'Baleno', variant: 'Alpha', color: 'Nexa Blue', year: 2025, purchase: 72000000, selling: 78900000 },
+  { chassis: 'MA3XZG01S03333444', engine: 'K12CC3334445', make: 'Maruti Suzuki', model: 'Celerio', variant: 'ZXi+', color: 'Glistening Grey', year: 2024, purchase: 52000000, selling: 56900000 },
+  { chassis: 'MA3XZH11S04444555', engine: 'K12DD4445556', make: 'Maruti Suzuki', model: 'Ignis', variant: 'Zeta', color: 'Pearl Arctic White', year: 2025, purchase: 58000000, selling: 62900000 },
+  { chassis: 'MA3XZI21S05555666', engine: 'K12EE5556667', make: 'Maruti Suzuki', model: 'S-Presso', variant: 'VXi+', color: 'Solid Fire Red', year: 2024, purchase: 48000000, selling: 51900000 },
+  { chassis: 'MA3XZJ31S06666777', engine: 'K12FF6667778', make: 'Maruti Suzuki', model: 'XL6', variant: 'Alpha+', color: 'Brave Khaki', year: 2025, purchase: 112000000, selling: 120900000 },
+  { chassis: 'MAKE4DD4DDD777888', engine: 'M15AA7778889', make: 'Toyota', model: 'Fortuner', variant: '4x4 AT', color: 'Phantom Brown', year: 2024, purchase: 385000000, selling: 419900000 },
+  { chassis: 'MAKE5EE5EEE888999', engine: 'M15BB8889900', make: 'Toyota', model: 'Camry', variant: 'Hybrid', color: 'Silver Metallic', year: 2025, purchase: 420000000, selling: 455900000 },
+  { chassis: 'MH2KC2CDXPP999000', engine: 'KC16F9990001', make: 'Honda', model: 'Amaze', variant: 'VX CVT', color: 'Radiant Red', year: 2024, purchase: 72000000, selling: 78900000 },
+  { chassis: 'MH2RV2CE2PP000111', engine: 'L15BH0001112', make: 'Honda', model: 'Jazz', variant: 'ZX', color: 'Lunar Silver', year: 2025, purchase: 88000000, selling: 94900000 },
+  { chassis: 'MH3HY3HY3HY111222', engine: 'HY11A1112223', make: 'Hyundai', model: 'i20', variant: 'Asta', color: 'Polar White', year: 2025, purchase: 82000000, selling: 88900000 },
+  { chassis: 'MH3HY4HY4HY222333', engine: 'HY22B2223334', make: 'Hyundai', model: 'Venue', variant: 'SX', color: 'Phantom Black', year: 2024, purchase: 98000000, selling: 105900000 },
+  { chassis: 'MH3HY5HY5HY333444', engine: 'HY33C3334445', make: 'Hyundai', model: 'Creta', variant: 'SX(O)', color: 'Atlas White', year: 2025, purchase: 165000000, selling: 178900000 },
+  { chassis: 'MH4TA4TA4TA444555', engine: 'TA44D4445556', make: 'Tata', model: 'Nexon', variant: 'XZ+', color: 'Daytona Grey', year: 2025, purchase: 112000000, selling: 120900000 },
+  { chassis: 'MH4TA5TA5TA555666', engine: 'TA55E5556667', make: 'Tata', model: 'Punch', variant: 'Creative', color: 'Oxygen Blue', year: 2024, purchase: 72000000, selling: 78900000 },
+  { chassis: 'MH5KI5KI5KI666777', engine: 'KI66F6667778', make: 'Kia', model: 'Sonet', variant: 'GTX+', color: 'Intense Red', year: 2025, purchase: 125000000, selling: 134900000 },
+  { chassis: 'MH5KI6KI6KI777888', engine: 'KI77G7778889', make: 'Kia', model: 'Seltos', variant: 'GTX+', color: 'Gravity Grey', year: 2024, purchase: 168000000, selling: 181900000 },
+  { chassis: 'MH6MG6MG6MG888999', engine: 'MG88H8889900', make: 'MG', model: 'Astor', variant: 'Savvy', color: 'Hunter Green', year: 2025, purchase: 142000000, selling: 152900000 },
 ];
 
 async function seed() {
@@ -35,6 +54,10 @@ async function seed() {
       `SELECT id FROM companies WHERE gstin IN ('27AABCD1234E1Z5', '07AASCM8531F1Z4') AND is_deleted = FALSE`
     );
     for (const { id: cid } of existingCompanies.rows) {
+      await client.query(`DELETE FROM whatsapp_pending_tasks WHERE company_id = $1`, [cid]);
+      await client.query(`DELETE FROM whatsapp_logs WHERE company_id = $1`, [cid]);
+      await client.query(`DELETE FROM loan_penalty_log WHERE company_id = $1`, [cid]);
+      await client.query(`DELETE FROM eway_bills WHERE company_id = $1`, [cid]);
       await client.query(`DELETE FROM leave_applications WHERE company_id = $1`, [cid]);
       await client.query(`DELETE FROM leave_types WHERE company_id = $1`, [cid]);
       await client.query(`DELETE FROM attendance WHERE company_id = $1`, [cid]);
@@ -53,6 +76,7 @@ async function seed() {
       await client.query(`DELETE FROM customers WHERE company_id = $1`, [cid]);
       await client.query(`DELETE FROM refresh_tokens WHERE company_id = $1`, [cid]);
       await client.query(`DELETE FROM audit_logs WHERE company_id = $1`, [cid]);
+      await client.query(`DELETE FROM whatsapp_templates WHERE company_id = $1`, [cid]);
       await client.query(`DELETE FROM invoice_templates WHERE company_id = $1`, [cid]);
       await client.query(`DELETE FROM einvoice_tokens WHERE company_id = $1`, [cid]);
       await client.query(`UPDATE branches SET manager_id = NULL WHERE company_id = $1`, [cid]);
@@ -147,6 +171,8 @@ async function seed() {
         }),
       ],
     );
+
+    await seedWhatsappTemplates(companyId, client);
 
     // ── 2. Branches ───────────────────────────────────────
     const { rows: [mapusa] } = await client.query(
@@ -370,23 +396,25 @@ async function seed() {
     await applyApprovedLeaveToAttendance(manager1.id, mapusa.id, mClFrom, mClTo);
 
     // ── 4. Vehicles ───────────────────────────────────────
+    const soldCount = 8;
+    const soldStartIndex = VEHICLE_DATA.length - soldCount;
     const vehicleIds = [];
     for (let i = 0; i < VEHICLE_DATA.length; i++) {
       const v = VEHICLE_DATA[i];
-      const branchId = i < 6 ? mapusa.id : panaji.id;
+      const branchId = i % 2 === 0 ? mapusa.id : panaji.id;
       const insuranceExpiry = new Date();
-      // Mix: some expiring soon, some far out
       if (i === 2) {
-        insuranceExpiry.setDate(insuranceExpiry.getDate() + 15); // expiring in 15 days
-      } else if (i === 7) {
-        insuranceExpiry.setDate(insuranceExpiry.getDate() - 10); // already expired
+        insuranceExpiry.setDate(insuranceExpiry.getDate() + 15);
+      } else if (i === 15) {
+        insuranceExpiry.setDate(insuranceExpiry.getDate() - 10);
       } else {
-        insuranceExpiry.setMonth(insuranceExpiry.getMonth() + 6 + i);
+        insuranceExpiry.setMonth(insuranceExpiry.getMonth() + (6 + (i % 8)));
       }
 
       const rtoDate = new Date();
-      rtoDate.setMonth(rtoDate.getMonth() - (3 + i));
+      rtoDate.setMonth(rtoDate.getMonth() - (3 + (i % 12)));
 
+      const inStock = i < soldStartIndex;
       const { rows: [vehicle] } = await client.query(
         `INSERT INTO vehicles
            (company_id, branch_id, chassis_number, engine_number, make, model, variant,
@@ -397,7 +425,7 @@ async function seed() {
         [
           companyId, branchId, v.chassis, v.engine, v.make, v.model, v.variant,
           v.color, v.year, v.purchase, v.selling,
-          i < 8 ? 'in_stock' : 'sold',
+          inStock ? 'in_stock' : 'sold',
           `GA-${String(1 + i).padStart(2, '0')}-${String(1000 + i * 111)}`,
           rtoDate.toISOString().slice(0, 10),
           ['ICICI Lombard', 'HDFC ERGO', 'New India Assurance', 'Bajaj Allianz'][i % 4],
@@ -409,106 +437,240 @@ async function seed() {
     }
 
     // ── 5. Customers ──────────────────────────────────────
-    const { rows: [customer1] } = await client.query(
-      `INSERT INTO customers (company_id, name, phone, email, address, gstin)
-       VALUES ($1, 'Vikram Sinai', '9823456701', 'vikram.sinai@email.com',
-               'House 201, Dona Paula, Goa 403004', '30AABCV1234H1Z9')
-       RETURNING id`,
-      [companyId],
-    );
+    const CUSTOMER_ROWS = [
+      ['Vikram Sinai', '9823456701', 'vikram.sinai@email.com', 'House 201, Sector 12, New Delhi 110092', '07AABCV1234H1Z9'],
+      ['Anita Fernandes', '9823456702', 'anita.f@email.com', 'Flat 3B, Laxmi Nagar, Delhi 110092', null],
+      ['Rohit Sharma', '9810011122', 'rohit.s@email.com', '42 MG Road, Satna 485666', '23AABCR5678F1Z2'],
+      ['Priya Menon', '9845033344', 'priya.m@email.com', 'Plot 7, Civil Lines, Satna', null],
+      ['Kiran Patel', '9876512345', 'kiran.p@email.com', 'Shop 12, Main Bazar, Delhi', '07AABCP9999E1Z1'],
+      ['Deepak Nair', '9898765432', 'deepak.n@email.com', 'Villa 8, Royani, Satna', null],
+      ['Sneha Reddy', '9123456780', 'sneha.r@email.com', 'Apt 4C, Dwarka, Delhi', null],
+      ['Manoj Tiwari', '9988776655', 'manoj.t@email.com', 'House 9, Kothi Road, Satna', '23AABCT1111H1Z3'],
+      ['Geeta Iyer', '9765432109', 'geeta.i@email.com', 'Office 15, Connaught Place, Delhi', null],
+      ['Arjun Mehta', '9654321098', 'arjun.m@email.com', 'Warehouse Lane, Satna', null],
+      ['Neha Kapoor', '9543210987', 'neha.k@email.com', 'Tower B, Laxmi Nagar, Delhi', '07AABCK2222L1Z4'],
+      ['Vikas Rao', '9432109876', 'vikas.r@email.com', 'NH-7 Service Road, Satna', null],
+    ];
 
-    const { rows: [customer2] } = await client.query(
-      `INSERT INTO customers (company_id, name, phone, email, address)
-       VALUES ($1, 'Anita Fernandes', '9823456702', 'anita.f@email.com',
-               'Flat 3B, Fontainhas, Panaji, Goa 403001')
-       RETURNING id`,
-      [companyId],
-    );
+    const customerIds = [];
+    for (const [name, phone, email, address, gstin] of CUSTOMER_ROWS) {
+      const { rows: [c] } = await client.query(
+        gstin
+          ? `INSERT INTO customers (company_id, name, phone, email, address, gstin)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
+          : `INSERT INTO customers (company_id, name, phone, email, address)
+             VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        gstin ? [companyId, name, phone, email, address, gstin] : [companyId, name, phone, email, address],
+      );
+      customerIds.push(c.id);
+    }
 
-    // ── 6. Invoices ───────────────────────────────────────
-    // Invoice 1: confirmed sale of vehicle 9 (Honda City)
-    const vehicle9 = vehicleIds[8];
-    const inv1Subtotal = 152900000; // selling price in paise
-    const inv1Cgst = Math.round(inv1Subtotal * 0.14);
-    const inv1Sgst = Math.round(inv1Subtotal * 0.14);
-    const inv1Total = inv1Subtotal + inv1Cgst + inv1Sgst;
+    function gstSplit(subtotalPaise) {
+      const cgst = Math.round(subtotalPaise * 0.14);
+      const sgst = Math.round(subtotalPaise * 0.14);
+      return { cgst, sgst, total: subtotalPaise + cgst + sgst };
+    }
 
-    const { rows: [invoice1] } = await client.query(
+    // ── 6. Invoices (8 confirmed sales + drafts + cancelled) ──
+    const confirmedInvoiceIds = [];
+    for (let k = 0; k < soldCount; k += 1) {
+      const vIdx = soldStartIndex + k;
+      const v = VEHICLE_DATA[vIdx];
+      const vid = vehicleIds[vIdx];
+      const custId = customerIds[k % customerIds.length];
+      const branchId = vIdx % 2 === 0 ? mapusa.id : panaji.id;
+      const subtotal = v.selling;
+      const { cgst, sgst, total } = gstSplit(subtotal);
+      const invNo = `INV-2025-${String(k + 1).padStart(4, '0')}`;
+      const daysAgo = 5 + k * 12;
+
+      const { rows: [inv] } = await client.query(
+        `INSERT INTO invoices
+           (company_id, branch_id, invoice_number, invoice_date, customer_id, vehicle_id,
+            subtotal, cgst_amount, sgst_amount, igst_amount, total, status)
+         VALUES ($1, $2, $3, CURRENT_DATE - ($4::integer * INTERVAL '1 day'), $5, $6,
+                 $7, $8, $9, 0, $10, 'confirmed')
+         RETURNING id`,
+        [companyId, branchId, invNo, daysAgo, custId, vid, subtotal, cgst, sgst, total],
+      );
+      confirmedInvoiceIds.push(inv.id);
+
+      await client.query(
+        `INSERT INTO invoice_items
+           (invoice_id, company_id, description, hsn_code, quantity, unit_price,
+            cgst_rate, sgst_rate, igst_rate, cgst_amount, sgst_amount, igst_amount, amount)
+         VALUES ($1, $2, $3, '8703', 1, $4, 14, 14, 0, $5, $6, 0, $7)`,
+        [inv.id, companyId, `${v.make} ${v.model} ${v.variant}`, subtotal, cgst, sgst, total],
+      );
+    }
+
+    const draftSub = 50000000;
+    const draftGst = gstSplit(draftSub);
+    const { rows: [invDraft1] } = await client.query(
       `INSERT INTO invoices
          (company_id, branch_id, invoice_number, invoice_date, customer_id, vehicle_id,
-          subtotal, cgst_amount, sgst_amount, total, status)
-       VALUES ($1, $2, 'INV-2025-0001', CURRENT_DATE - INTERVAL '15 days', $3, $4,
-               $5, $6, $7, $8, 'confirmed')
+          subtotal, cgst_amount, sgst_amount, igst_amount, total, status)
+       VALUES ($1, $2, 'INV-2025-D001', CURRENT_DATE - 1, $3, NULL,
+               $4, $5, $6, 0, $7, 'draft')
        RETURNING id`,
-      [companyId, panaji.id, customer1.id, vehicle9,
-       inv1Subtotal, inv1Cgst, inv1Sgst, inv1Total],
+      [companyId, mapusa.id, customerIds[0], draftSub, draftGst.cgst, draftGst.sgst, draftGst.total],
     );
-
     await client.query(
       `INSERT INTO invoice_items
          (invoice_id, company_id, description, hsn_code, quantity, unit_price,
-          cgst_rate, sgst_rate, cgst_amount, sgst_amount, amount)
-       VALUES ($1, $2, 'Honda City ZX CVT', '8703', 1, $3,
-               14.00, 14.00, $4, $5, $6)`,
-      [invoice1.id, companyId, inv1Subtotal, inv1Cgst, inv1Sgst, inv1Total],
+          cgst_rate, sgst_rate, igst_rate, cgst_amount, sgst_amount, igst_amount, amount)
+       VALUES ($1, $2, 'Vehicle booking — pending allocation', '8703', 1, $3, 14, 14, 0, $4, $5, 0, $6)`,
+      [invDraft1.id, companyId, draftSub, draftGst.cgst, draftGst.sgst, draftGst.total],
     );
 
-    // Invoice 2: confirmed sale of vehicle 10 (Honda Elevate)
-    const vehicle10 = vehicleIds[9];
-    const inv2Subtotal = 167900000;
-    const inv2Cgst = Math.round(inv2Subtotal * 0.14);
-    const inv2Sgst = Math.round(inv2Subtotal * 0.14);
-    const inv2Total = inv2Subtotal + inv2Cgst + inv2Sgst;
-
-    const { rows: [invoice2] } = await client.query(
+    const { rows: [invCancel] } = await client.query(
       `INSERT INTO invoices
          (company_id, branch_id, invoice_number, invoice_date, customer_id, vehicle_id,
-          subtotal, cgst_amount, sgst_amount, total, status)
-       VALUES ($1, $2, 'INV-2025-0002', CURRENT_DATE - INTERVAL '5 days', $3, $4,
-               $5, $6, $7, $8, 'confirmed')
+          subtotal, cgst_amount, sgst_amount, igst_amount, total, status)
+       VALUES ($1, $2, 'INV-2025-X001', CURRENT_DATE - 40, $3, NULL,
+               $4, $5, $6, 0, $7, 'cancelled')
        RETURNING id`,
-      [companyId, mapusa.id, customer2.id, vehicle10,
-       inv2Subtotal, inv2Cgst, inv2Sgst, inv2Total],
+      [companyId, panaji.id, customerIds[3], draftSub, draftGst.cgst, draftGst.sgst, draftGst.total],
     );
-
     await client.query(
       `INSERT INTO invoice_items
          (invoice_id, company_id, description, hsn_code, quantity, unit_price,
-          cgst_rate, sgst_rate, cgst_amount, sgst_amount, amount)
-       VALUES ($1, $2, 'Honda Elevate ZX CVT', '8703', 1, $3,
-               14.00, 14.00, $4, $5, $6)`,
-      [invoice2.id, companyId, inv2Subtotal, inv2Cgst, inv2Sgst, inv2Total],
+          cgst_rate, sgst_rate, igst_rate, cgst_amount, sgst_amount, igst_amount, amount)
+       VALUES ($1, $2, 'Cancelled booking', '8703', 1, $3, 14, 14, 0, $4, $5, 0, $6)`,
+      [invCancel.id, companyId, draftSub, draftGst.cgst, draftGst.sgst, draftGst.total],
     );
 
-    // ── 7. Loan ───────────────────────────────────────────
-    // Loan on invoice 1 — overdue for demo purposes
-    const loanDueDate = new Date();
-    loanDueDate.setDate(loanDueDate.getDate() - 5); // overdue by 5 days
+    // ── 7. Loans (overdue, active, closed + extras) ─────────
+    const overdueDue = new Date();
+    overdueDue.setDate(overdueDue.getDate() - 8);
+    await client.query(
+      `INSERT INTO loans
+         (company_id, invoice_id, customer_id, bank_name, loan_amount,
+          interest_rate, tenure_months, emi_amount, disbursement_date,
+          due_date, penalty_per_day, total_penalty_accrued, status, grace_period_days)
+       VALUES ($1, $2, $3, 'HDFC Bank', 120000000, 8.50, 60, 2458900,
+               CURRENT_DATE - INTERVAL '45 days', $4, 50000, 380000, 'overdue', 3)`,
+      [companyId, confirmedInvoiceIds[0], customerIds[0], overdueDue.toISOString().slice(0, 10)],
+    );
+
+    const activeDue = new Date();
+    activeDue.setDate(activeDue.getDate() + 20);
+    await client.query(
+      `INSERT INTO loans
+         (company_id, invoice_id, customer_id, bank_name, loan_amount,
+          interest_rate, tenure_months, emi_amount, disbursement_date,
+          due_date, penalty_per_day, total_penalty_accrued, status, grace_period_days)
+       VALUES ($1, $2, $3, 'ICICI Bank', 95000000, 9.00, 48, 2100000,
+               CURRENT_DATE - INTERVAL '20 days', $4, 45000, 0, 'active', 5)`,
+      [companyId, confirmedInvoiceIds[1], customerIds[1], activeDue.toISOString().slice(0, 10)],
+    );
 
     await client.query(
       `INSERT INTO loans
          (company_id, invoice_id, customer_id, bank_name, loan_amount,
           interest_rate, tenure_months, emi_amount, disbursement_date,
           due_date, penalty_per_day, total_penalty_accrued, status)
-       VALUES ($1, $2, $3, 'HDFC Bank', 120000000, 8.50, 60, 2458900,
-               CURRENT_DATE - INTERVAL '30 days', $4, 50000, 250000, 'overdue')`,
-      [companyId, invoice1.id, customer1.id, loanDueDate.toISOString().slice(0, 10)],
+       VALUES ($1, $2, $3, 'Axis Bank', 60000000, 8.75, 36, 1850000,
+               CURRENT_DATE - INTERVAL '400 days', CURRENT_DATE - INTERVAL '30 days',
+               40000, 0, 'closed')`,
+      [companyId, confirmedInvoiceIds[2], customerIds[2]],
     );
 
-    // ── 8. Sample expenses ────────────────────────────────
+    const od2 = new Date();
+    od2.setDate(od2.getDate() - 3);
+    await client.query(
+      `INSERT INTO loans
+         (company_id, invoice_id, customer_id, bank_name, loan_amount,
+          interest_rate, tenure_months, emi_amount, disbursement_date,
+          due_date, penalty_per_day, total_penalty_accrued, status, grace_period_days)
+       VALUES ($1, $2, $3, 'SBI', 200000000, 8.25, 72, 4100000,
+               CURRENT_DATE - INTERVAL '60 days', $4, 60000, 120000, 'overdue', 2)`,
+      [companyId, confirmedInvoiceIds[3], customerIds[3], od2.toISOString().slice(0, 10)],
+    );
+
+    // ── 8. Quotations (mixed statuses) ─────────────────────
+    const qBranch = (i) => (i % 2 === 0 ? mapusa.id : panaji.id);
+    const quotationSpecs = [
+      ['QT-2025-0001', 'draft', customerIds[4], vehicleIds[3], 88900000],
+      ['QT-2025-0002', 'sent', customerIds[5], vehicleIds[5], 105900000],
+      ['QT-2025-0003', 'accepted', customerIds[6], null, 62900000],
+      ['QT-2025-0004', 'expired', customerIds[7], vehicleIds[7], 120900000],
+      ['QT-2025-0005', 'converted', customerIds[8], null, 51900000],
+    ];
+
+    for (let qi = 0; qi < quotationSpecs.length; qi += 1) {
+      const [qnum, qstatus, custId, vehId, sub] = quotationSpecs[qi];
+      const g = gstSplit(sub);
+      const qDate = new Date();
+      qDate.setDate(qDate.getDate() - qi * 2);
+      const vu = new Date();
+      if (qstatus === 'expired') vu.setDate(vu.getDate() - 10);
+      else vu.setDate(vu.getDate() + 21);
+      const convInvId = qstatus === 'converted' ? confirmedInvoiceIds[4] : null;
+      const { rows: [qrow] } = await client.query(
+        `INSERT INTO quotations (
+           company_id, branch_id, quotation_number, quotation_date, valid_until_date,
+           customer_id, vehicle_id, status,
+           subtotal, discount_type, discount_value, discount_amount,
+           cgst_amount, sgst_amount, igst_amount, total, prepared_by,
+           converted_to_invoice_id, converted_at
+         ) VALUES (
+           $1, $2, $3, $4::date, $5::date,
+           $6, $7, $8,
+           $9, 'flat', 0, 0,
+           $10, $11, 0, $12, $13,
+           $14::uuid, CASE WHEN $14::uuid IS NOT NULL THEN NOW() ELSE NULL END
+         ) RETURNING id`,
+        [
+          companyId, qBranch(qi), qnum,
+          qDate.toISOString().slice(0, 10),
+          vu.toISOString().slice(0, 10),
+          custId, vehId, qstatus,
+          sub, g.cgst, g.sgst, g.total, staff1.id,
+          convInvId,
+        ],
+      );
+      await client.query(
+        `INSERT INTO quotation_items (
+           quotation_id, company_id, item_type, description, hsn_code, quantity, unit_price,
+           discount_type, discount_value, discount_amount,
+           cgst_rate, sgst_rate, igst_rate, cgst_amount, sgst_amount, igst_amount, amount, sort_order
+         ) VALUES (
+           $1, $2, 'vehicle', $3, '8703', 1, $4,
+           'none', 0, 0,
+           14, 14, 0, $5, $6, 0, $7, 0
+         )`,
+        [qrow.id, companyId, `Quotation line — ${qnum}`, sub, g.cgst, g.sgst, g.total],
+      );
+    }
+
+    // ── 9. Sample expenses (more rows) ───────────────────
     const expenseData = [
-      { cat: 'Electricity', desc: 'April electricity bill - Mapusa showroom', amt: 850000, branch: mapusa.id, daysAgo: 3 },
-      { cat: 'Tea/Coffee', desc: 'Monthly tea/coffee supplies', amt: 350000, branch: mapusa.id, daysAgo: 7 },
-      { cat: 'Salary', desc: 'Part-time cleaner salary', amt: 1200000, branch: panaji.id, daysAgo: 1 },
-      { cat: 'Maintenance', desc: 'AC repair - Panaji office', amt: 450000, branch: panaji.id, daysAgo: 10 },
-      { cat: 'Transport', desc: 'Vehicle delivery transport', amt: 250000, branch: mapusa.id, daysAgo: 5 },
+      { cat: 'Electricity', desc: 'Showroom electricity — Delhi', amt: 850000, branch: mapusa.id, daysAgo: 3 },
+      { cat: 'Tea/Coffee', desc: 'Pantry supplies', amt: 350000, branch: mapusa.id, daysAgo: 7 },
+      { cat: 'Salary', desc: 'Support staff wages', amt: 1200000, branch: panaji.id, daysAgo: 1 },
+      { cat: 'Maintenance', desc: 'AC servicing — Satna', amt: 450000, branch: panaji.id, daysAgo: 10 },
+      { cat: 'Transport', desc: 'PDI transport charges', amt: 250000, branch: mapusa.id, daysAgo: 5 },
+      { cat: 'Marketing', desc: 'Local newspaper ads', amt: 1800000, branch: mapusa.id, daysAgo: 14 },
+      { cat: 'IT', desc: 'Internet + software renewals', amt: 220000, branch: panaji.id, daysAgo: 2 },
+      { cat: 'Rent', desc: 'Branch rent advance', amt: 4500000, branch: panaji.id, daysAgo: 30 },
+      { cat: 'Insurance', desc: 'Fire insurance policy', amt: 190000, branch: mapusa.id, daysAgo: 60 },
+      { cat: 'Stationery', desc: 'Office stationery Q1', amt: 85000, branch: mapusa.id, daysAgo: 8 },
+      { cat: 'Fuel', desc: 'Test-drive fuel', amt: 420000, branch: panaji.id, daysAgo: 4 },
+      { cat: 'Legal', desc: 'Registration assistance fees', amt: 150000, branch: mapusa.id, daysAgo: 18 },
+      { cat: 'Canteen', desc: 'Staff meals subsidy', amt: 95000, branch: panaji.id, daysAgo: 6 },
+      { cat: 'Security', desc: 'Security agency — March', amt: 880000, branch: mapusa.id, daysAgo: 11 },
+      { cat: 'Cleaning', desc: 'Deep cleaning — showroom', amt: 320000, branch: panaji.id, daysAgo: 9 },
+      { cat: 'Training', desc: 'Sales training workshop', amt: 650000, branch: mapusa.id, daysAgo: 22 },
+      { cat: 'Uniforms', desc: 'Staff uniforms', amt: 275000, branch: panaji.id, daysAgo: 16 },
+      { cat: 'Misc', desc: 'Bank charges & petty cash', amt: 125000, branch: mapusa.id, daysAgo: 1 },
     ];
 
     for (const e of expenseData) {
       await client.query(
         `INSERT INTO expenses (company_id, branch_id, category, description, amount, expense_date, created_by)
-         VALUES ($1, $2, $3, $4, $5, CURRENT_DATE - ($6 || ' days')::interval, $7)`,
-        [companyId, e.branch, e.cat, e.desc, e.amt, String(e.daysAgo), staff1.id],
+         VALUES ($1, $2, $3, $4, $5, CURRENT_DATE - ($6::integer * INTERVAL '1 day'), $7)`,
+        [companyId, e.branch, e.cat, e.desc, e.amt, e.daysAgo, staff1.id],
       );
     }
 
@@ -521,12 +683,14 @@ async function seed() {
       [companyId, vehicleIds[5], mapusa.id, panaji.id, adminUser.id],
     );
 
-    // ── 10. E-Way Bill ────────────────────────────────
+    // ── 10. E-Way Bill (first confirmed sale) ─────────
+    const ewayInvoiceId = confirmedInvoiceIds[0];
+    const ewayVehicleId = vehicleIds[soldStartIndex];
     await client.query(
       `INSERT INTO eway_bills
          (company_id, reference_type, reference_id, vehicle_id, eway_bill_number, generated_json, status, valid_from, valid_until, distance_km)
        VALUES ($1, 'sale', $2, $3, '331400123456', '{"sample": "data"}', 'submitted', NOW() - INTERVAL '1 day', NOW() + INTERVAL '1 day', 15)`,
-      [companyId, invoice1.id, vehicle9],
+      [companyId, ewayInvoiceId, ewayVehicleId],
     );
 
     await client.query('COMMIT');
@@ -540,10 +704,10 @@ async function seed() {
     console.log('  ║  GSTIN   : 07AASCM8531F1Z4                           ║');
     console.log('  ║                                                       ║');
     console.log('  ║  Branches: MVG Delhi (RO), MVG Satna (Sales)          ║');
-    console.log('  ║  Vehicles: 10 (8 in stock, 2 sold)                   ║');
-    console.log('  ║  Invoices: 2 confirmed                               ║');
-    console.log('  ║  Loans   : 1 overdue                                 ║');
-    console.log('  ║  Expenses: 5 sample entries                           ║');
+    console.log(`  ║  Vehicles: ${VEHICLE_DATA.length} (${VEHICLE_DATA.length - soldCount} in stock, ${soldCount} sold)              ║`);
+    console.log(`  ║  Customers: ${CUSTOMER_ROWS.length} · Invoices: ${soldCount} confirmed + draft + cancelled ║`);
+    console.log('  ║  Loans   : 4 (overdue, active, closed mix)            ║');
+    console.log('  ║  Quotations: 5 · Expenses: 18 sample entries          ║');
     console.log('  ║                                                       ║');
     console.log('  ╠═══════════════════════════════════════════════════════╣');
     console.log('  ║  Login credentials (all use password: VehicleERP@2026) ║');
