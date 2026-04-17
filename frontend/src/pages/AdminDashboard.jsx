@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import api from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { IndianRupee, TrendingUp, Warehouse, AlertTriangle, Loader2 } from 'lucide-react';
+import PendingWhatsAppTasks from '@/components/PendingWhatsAppTasks';
 
 const statusColors = {
   confirmed: 'success',
@@ -80,6 +81,10 @@ export default function AdminDashboard() {
         <p className="text-sm text-muted-foreground">
           Overview for {data.period?.from} — {data.period?.to}
         </p>
+      </div>
+
+      <div className="mb-6">
+        <PendingWhatsAppTasks />
       </div>
 
       {/* Stat cards */}

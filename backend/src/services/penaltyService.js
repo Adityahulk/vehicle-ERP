@@ -257,40 +257,10 @@ async function processOverduePenalties() {
   return { updated: r.updated, unchanged: r.unchanged, errors: r.errors };
 }
 
-/**
- * Legacy Twilio stub — prefer milestone WhatsApp via loan reminder queue.
- */
-async function sendPenaltyWhatsApp(loan) {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const fromNumber = process.env.TWILIO_WHATSAPP_FROM;
-
-  if (!accountSid || !authToken || !fromNumber || !loan.customer_phone) {
-    console.log(`[Penalty] Skipping WhatsApp for loan ${loan.id} — credentials or phone missing`);
-    return;
-  }
-
-  try {
-    const twilio = require('twilio')(accountSid, authToken);
-    const penaltyRupees = (Number(loan.total_penalty_accrued) / 100).toFixed(2);
-
-    await twilio.messages.create({
-      body: `Dear ${loan.customer_name}, your vehicle loan with ${loan.bank_name} is overdue. Accrued penalty: ₹${penaltyRupees}. Please clear the outstanding amount at the earliest. — Vehicle ERP`,
-      from: `whatsapp:${fromNumber}`,
-      to: `whatsapp:+91${String(loan.customer_phone).replace(/^\+91/, '')}`,
-    });
-
-    console.log(`[Penalty] WhatsApp sent to ${loan.customer_phone} for loan ${loan.id}`);
-  } catch (err) {
-    console.error(`[Penalty] WhatsApp failed for loan ${loan.id}:`, err.message);
-  }
-}
-
 module.exports = {
   calculatePenalty,
   updateLoanPenalties,
   waivePenalty,
   processOverduePenalties,
-  sendPenaltyWhatsApp,
   calendarDaysPastDueDate,
 };

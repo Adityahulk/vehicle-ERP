@@ -19,6 +19,7 @@ import {
   Loader2,
   FileText,
 } from 'lucide-react';
+import PendingWhatsAppTasks from '@/components/PendingWhatsAppTasks';
 
 const statusColors = {
   confirmed: 'success',
@@ -122,6 +123,10 @@ export default function BranchDashboard() {
         <Button variant="outline" onClick={() => navigate('/quotations/new')} className="gap-2">
           <FileText className="h-4 w-4" /> Add Quotation
         </Button>
+      </div>
+
+      <div className="mb-6">
+        <PendingWhatsAppTasks />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">

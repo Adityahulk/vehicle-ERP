@@ -8,15 +8,16 @@ router.use(verifyToken);
 router.use(requireNotRole('ca'));
 
 const staffPlus = requireRole('staff', 'branch_manager', 'company_admin', 'super_admin');
+const managersPlus = requireMinRole('branch_manager');
 
-router.post('/send-invoice/:invoiceId', staffPlus, wc.sendInvoiceWhatsApp);
-router.post('/send-quotation/:quotationId', staffPlus, wc.sendQuotationWhatsApp);
 router.get('/preview-invoice/:invoiceId', staffPlus, wc.previewInvoiceMessage);
 router.get('/preview-quotation/:quotationId', staffPlus, wc.previewQuotationMessage);
-
-router.post('/send-custom', requireMinRole('branch_manager'), wc.sendCustom);
 router.get('/preview-loan/:loanId', staffPlus, wc.previewLoanMessage);
-router.post('/send-loan-reminder/:loanId', staffPlus, wc.sendLoanReminder);
+router.post('/loan/:loanId/record-reminder', staffPlus, wc.recordLoanReminderSent);
+
+router.get('/pending-tasks', managersPlus, wc.listPendingTasks);
+router.post('/pending-tasks/:id/dismiss', managersPlus, wc.dismissPendingTask);
+router.post('/pending-tasks/:id/complete-reminder', managersPlus, wc.completePendingReminderTask);
 
 router.get('/logs', requireMinRole('branch_manager'), wc.listLogs);
 router.get('/logs/invoice/:invoiceId', wc.logsForInvoice);

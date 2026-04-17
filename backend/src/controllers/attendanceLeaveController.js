@@ -1,6 +1,6 @@
 const { query, getClient } = require('../config/db');
 const { getLeaveTypeById, seedDefaultLeaveTypes } = require('../services/leaveTypesService');
-const { sendWhatsApp } = require('../services/notificationService');
+const { sendSMS } = require('../services/notificationService');
 const { istYmd, pgDateToYmd } = require('../lib/istDate');
 
 function todayYmd() {
@@ -178,7 +178,7 @@ async function leaveApply(req, res) {
       if (mgr?.phone) {
         const msg =
           `[MVG ERP] Leave request from ${req.user.name || 'Staff'}: ${lt.name} ${fromStr} to ${toStr} (${totalDays} day(s)). Reason: ${String(reason).slice(0, 120)}`;
-        await sendWhatsApp(mgr.phone, msg);
+        await sendSMS(mgr.phone, msg).catch(() => {});
       }
     }
 

@@ -633,7 +633,6 @@ export default function SalesPage() {
   const [previewInvoice, setPreviewInvoice] = useState(null);
   const [waDialog, setWaDialog] = useState(null);
   const [waMeta, setWaMeta] = useState({});
-  const [whatsappLogs, setWhatsappLogs] = useState({});
   const [pdfTemplateChoice, setPdfTemplateChoice] = useState({});
 
 

@@ -29,7 +29,8 @@ Invoice No: {invoice_number}
 Vehicle: {vehicle}
 Amount: ₹{amount}
 
-View/Download your invoice: {share_link}
+View invoice (link): {share_link}
+PDF (direct link): {pdf_link}
 
 For any queries, call us at {branch_phone}
 
@@ -48,6 +49,7 @@ Total: ₹{amount}
 Valid Until: {valid_until}
 
 View quotation: {share_link}
+PDF: {pdf_link}
 
 To confirm your booking or for queries:
 📞 {branch_phone}

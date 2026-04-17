@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Check } from 'lucide-react';
+import { Loader2, Check, ExternalLink } from 'lucide-react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -18,7 +18,7 @@ function waMeUrl(phone10, text) {
   return `https://wa.me/91${n}?text=${encodeURIComponent(text)}`;
 }
 
-function previewLines(text, maxLines = 3) {
+function previewLines(text, maxLines = 4) {
   if (!text) return '';
   const lines = text.split('\n').filter(Boolean);
   if (lines.length <= maxLines) return text;
@@ -39,23 +39,25 @@ export default function WhatsAppSendDialog({
   entityId,
   customerName,
   onAppSendSuccess,
+  /** loan message template: loan_overdue | loan_due_soon | loan_penalty_alert */
+  messageType = 'loan_overdue',
 }) {
   const qc = useQueryClient();
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [phoneDigits, setPhoneDigits] = useState('');
   const [editFull, setEditFull] = useState(false);
   const [editedBody, setEditedBody] = useState('');
-  const [justSent, setJustSent] = useState(false);
+  const [justOpened, setJustOpened] = useState(false);
 
   const previewPath =
     kind === 'invoice'
       ? `/whatsapp/preview-invoice/${entityId}`
       : kind === 'loan'
-        ? `/whatsapp/preview-loan/${entityId}`
+        ? `/whatsapp/preview-loan/${entityId}?messageType=${encodeURIComponent(messageType)}`
         : `/whatsapp/preview-quotation/${entityId}`;
 
   const { data: pre, isLoading: preLoad } = useQuery({
-    queryKey: ['whatsapp-preview', kind, entityId],
+    queryKey: ['whatsapp-preview', kind, entityId, messageType],
     queryFn: () => api.get(previewPath).then((r) => r.data),
     enabled: open && !!entityId && !!kind,
   });
@@ -67,41 +69,42 @@ export default function WhatsAppSendDialog({
   const phone = phoneTouched ? phoneDigits : derivedPhone;
   const templateBody = pre?.previewMessage || '';
 
-  const sendMut = useMutation({
-    mutationFn: (body) => {
-      let url = `/whatsapp/send-quotation/${entityId}`;
-      if (kind === 'invoice') url = `/whatsapp/send-invoice/${entityId}`;
-      if (kind === 'loan') url = `/whatsapp/send-loan-reminder/${entityId}`;
-      const ph = phoneTouched ? phoneDigits : derivedPhone;
-      return api.post(url, { ...body, phone: ph ? `+91${ph}` : undefined });
+  const recordLoanMut = useMutation({
+    mutationFn: () => api.post(`/whatsapp/loan/${entityId}/record-reminder`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['loans'] });
     },
-    onSuccess: (res) => {
-      const data = res?.data;
-      if (data?.success === false) {
-        toast.error(data.error || 'Send failed — check WhatsApp template is configured');
-        return;
-      }
-      toast.success('WhatsApp sent');
-      setJustSent(true);
-      if (kind === 'invoice') {
-        qc.invalidateQueries({ queryKey: ['whatsapp-logs-invoice', entityId] });
-      }
-      onAppSendSuccess?.({ kind, entityId });
-      setTimeout(() => setJustSent(false), 3000);
-    },
-    onError: (e) => toast.error(e.response?.data?.error || 'Send failed'),
+    onError: () => {},
   });
 
   const displayPreview = editFull ? editedBody : templateBody;
   const waLinkText = editFull ? editedBody : templateBody;
+  const openUrl = pre?.whatsappUrl || (phone?.length === 10 ? waMeUrl(phone, waLinkText) : null);
+
+  const handleOpenWhatsApp = () => {
+    if (!openUrl || openUrl === '#') {
+      toast.error('Invalid phone or message');
+      return;
+    }
+    window.open(openUrl, '_blank', 'noopener,noreferrer');
+    setJustOpened(true);
+    setTimeout(() => setJustOpened(false), 2500);
+    if (kind === 'loan') {
+      recordLoanMut.mutate();
+    }
+    onAppSendSuccess?.({ kind, entityId });
+    if (kind === 'invoice') {
+      qc.invalidateQueries({ queryKey: ['whatsapp-logs-invoice', entityId] });
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Send to {customerName || pre?.customer_name || 'Customer'}</DialogTitle>
+          <DialogTitle>Message {customerName || pre?.customer_name || 'Customer'}</DialogTitle>
           <DialogDescription>
-            WhatsApp message using your company template. Uses Twilio when configured, or mock in dev.
+            Opens WhatsApp (app or web) with this text prefilled. Links to view or download PDF are included in the message — you can send as-is or attach the file from your device after downloading.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-2">
@@ -123,7 +126,7 @@ export default function WhatsAppSendDialog({
             <>
               <div className="space-y-1">
                 <Label>Message preview</Label>
-                <p className="text-xs text-muted-foreground whitespace-pre-wrap rounded-md border bg-muted/40 p-2 max-h-28 overflow-y-auto">
+                <p className="text-xs text-muted-foreground whitespace-pre-wrap rounded-md border bg-muted/40 p-2 max-h-36 overflow-y-auto">
                   {editFull ? null : previewLines(templateBody)}
                 </p>
                 {!editFull && (
@@ -147,29 +150,42 @@ export default function WhatsAppSendDialog({
                   />
                 )}
               </div>
+              {(pre?.pdfUrl || pre?.shareUrl) && (
+                <div className="flex flex-wrap gap-2 text-xs">
+                  {pre?.shareUrl && (
+                    <a
+                      href={pre.shareUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline inline-flex items-center gap-1"
+                    >
+                      Open share link <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                  {pre?.pdfUrl && (
+                    <a
+                      href={pre.pdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline inline-flex items-center gap-1"
+                    >
+                      Open PDF link <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
         <DialogFooter className="flex-col sm:flex-row gap-2">
           <Button
             type="button"
-            variant="outline"
-            className="w-full sm:w-auto"
-            disabled={!phone || phone.length !== 10}
-            onClick={() => {
-              window.open(waMeUrl(phone, waLinkText), '_blank', 'noopener,noreferrer');
-            }}
-          >
-            Open WhatsApp
-          </Button>
-          <Button
-            type="button"
             className="w-full sm:w-auto bg-[#25d366] hover:bg-[#20bd5a] text-white"
-            disabled={sendMut.isPending || !phone || phone.length !== 10 || !displayPreview.trim()}
-            onClick={() => sendMut.mutate({ message: editFull ? editedBody : undefined })}
+            disabled={!phone || phone.length !== 10 || !displayPreview.trim() || !openUrl}
+            onClick={handleOpenWhatsApp}
           >
-            {sendMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : justSent ? <Check className="h-4 w-4" /> : null}
-            Send via app
+            {recordLoanMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : justOpened ? <Check className="h-4 w-4" /> : null}
+            Open WhatsApp
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -190,8 +206,8 @@ function formatSentAgo(ts) {
 
 export function WhatsAppIconButton({ onClick, title, lastSentAt, flashCheck }) {
   const tip = lastSentAt
-    ? `Sent ${formatSentAgo(lastSentAt)}`
-    : title || 'Send via WhatsApp';
+    ? `Opened ${formatSentAgo(lastSentAt)}`
+    : title || 'Message on WhatsApp';
   return (
     <button
       type="button"

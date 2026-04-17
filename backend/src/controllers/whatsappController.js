@@ -1,12 +1,20 @@
 const { query } = require('../config/db');
 const ic = require('./invoicesController');
 const {
-  sendWhatsApp,
-  sendCustomMessage,
+  buildMessage,
+  buildWhatsAppOpenUrl,
+  generateShareLink,
+  generateSharePdfLink,
+  normalizeIndianMobile,
   validateTemplatePlaceholders,
 } = require('../services/whatsappService');
 const { calculatePenalty } = require('../services/penaltyService');
 const { loadQuotationBundle } = require('./quotationsController');
+const {
+  listOpenTasksForUser,
+  getTaskForCompany,
+  dismissTask,
+} = require('../services/whatsappPendingTasksService');
 
 function fmtRupees(paise) {
   return (Number(paise || 0) / 100).toLocaleString('en-IN', {
@@ -20,112 +28,77 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-/** Replaces {share_link} in templates — we do not host PDFs for public sharing. */
-const PDF_SHARE_HINT = 'Please contact us at the branch for a PDF copy of this document.';
+const LOAN_MSG_TYPES = new Set(['loan_overdue', 'loan_due_soon', 'loan_penalty_alert']);
 
-async function sendInvoiceWhatsApp(req, res) {
+function branchAllowedForTask(req, task) {
+  const { role, branch_id: userBranch } = req.user;
+  if (role === 'branch_manager' && task.branch_id && String(task.branch_id) !== String(userBranch)) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * GET preview — includes wa.me URL (compose on device).
+ */
+async function previewInvoiceMessage(req, res) {
   try {
     const { invoiceId } = req.params;
     const companyId = req.user.company_id;
-    const { role, branch_id: userBranch } = req.user;
-
     const data = await ic.fetchFullInvoice(invoiceId, companyId);
     if (!data) return res.status(404).json({ error: 'Invoice not found' });
-
     const inv = data.invoice;
-    if (role === 'staff' || role === 'branch_manager') {
-      if (String(inv.branch_id) !== String(userBranch)) {
-        return res.status(403).json({ error: 'Not allowed for this branch' });
-      }
-    }
-
-    let phone = inv.customer_phone;
-    if (req.body?.phone && String(req.body.phone).replace(/\D/g, '').length >= 10) {
-      phone = req.body.phone;
-    }
-    if (!phone || !String(phone).trim()) {
-      return res.status(400).json({ error: 'Customer has no phone number on record' });
-    }
-
     const vehicle = [inv.vehicle_make, inv.vehicle_model].filter(Boolean).join(' ') || 'N/A';
+    const shareLink = generateShareLink('invoice', invoiceId, companyId);
+    const pdfLink = generateSharePdfLink('invoice', invoiceId, companyId);
     const variables = {
       customer_name: inv.customer_name || 'Customer',
       company_name: inv.company_name || 'Our dealership',
       invoice_number: inv.invoice_number,
       vehicle,
       amount: fmtRupees(inv.total),
-      share_link: PDF_SHARE_HINT,
+      share_link: shareLink,
+      pdf_link: pdfLink,
       branch_phone: inv.branch_phone || inv.company_phone || 'N/A',
     };
-
-    const bodyOverride = req.body?.message;
-    let previewMessage;
-    let result;
-
-    if (bodyOverride && String(bodyOverride).trim()) {
-      result = await sendCustomMessage({
-        companyId,
-        recipientPhone: phone,
-        recipientName: inv.customer_name,
-        messageBody: String(bodyOverride).trim(),
-        triggeredByUserId: req.user.id,
-      });
-      previewMessage = String(bodyOverride).trim();
-    } else {
-      result = await sendWhatsApp({
-        companyId,
-        recipientPhone: phone,
-        recipientName: inv.customer_name,
-        messageType: 'invoice_share',
-        referenceId: invoiceId,
-        referenceType: 'invoice',
-        variables,
-        triggeredByUserId: req.user.id,
-      });
-      previewMessage = result.previewMessage;
-    }
-
-    if (!result.success) {
-      return res.status(400).json({ success: false, error: result.error, previewMessage });
-    }
-    res.json({ success: true, logId: result.logId, previewMessage });
+    const { rows: tpl } = await query(
+      `SELECT template_body FROM whatsapp_templates
+       WHERE company_id = $1 AND message_type = 'invoice_share' AND is_active = TRUE`,
+      [companyId],
+    );
+    const previewMessage = tpl.length ? buildMessage(tpl[0].template_body, variables) : '';
+    const phone = normalizeIndianMobile(inv.customer_phone);
+    const whatsappUrl = phone ? buildWhatsAppOpenUrl(phone, previewMessage) : null;
+    res.json({
+      previewMessage,
+      customer_phone: inv.customer_phone,
+      customer_name: inv.customer_name,
+      shareUrl: shareLink,
+      pdfUrl: pdfLink,
+      whatsappUrl,
+    });
   } catch (err) {
-    console.error('sendInvoiceWhatsApp:', err.message);
-    res.status(500).json({ error: 'Failed to send WhatsApp' });
+    console.error('previewInvoiceMessage:', err.message);
+    res.status(500).json({ error: 'Failed to build preview' });
   }
 }
 
-async function sendQuotationWhatsApp(req, res) {
+async function previewQuotationMessage(req, res) {
   try {
     const { quotationId } = req.params;
     const companyId = req.user.company_id;
-    const { role, branch_id: userBranch } = req.user;
-
     const bundle = await loadQuotationBundle(quotationId, companyId);
     if (!bundle || bundle.quotation.is_deleted) {
       return res.status(404).json({ error: 'Quotation not found' });
     }
     const qrow = bundle.quotation;
-    if (role === 'staff' || role === 'branch_manager') {
-      if (String(qrow.branch_id) !== String(userBranch)) {
-        return res.status(403).json({ error: 'Not allowed for this branch' });
-      }
-    }
-
-    let phone = qrow.customer_phone_override || bundle.customer?.phone;
-    if (req.body?.phone && String(req.body.phone).replace(/\D/g, '').length >= 10) {
-      phone = req.body.phone;
-    }
-    if (!phone || !String(phone).trim()) {
-      return res.status(400).json({ error: 'Customer has no phone number on record' });
-    }
-
-    const vehicle = [qrow.vehicle_make, qrow.vehicle_model].filter(Boolean).join(' ') || 'N/A';
+    const phone = qrow.customer_phone_override || bundle.customer?.phone;
     const custName = qrow.customer_name_override || bundle.customer?.name || 'Customer';
-
+    const vehicle = [qrow.vehicle_make, qrow.vehicle_model].filter(Boolean).join(' ') || 'N/A';
     const { rows: co } = await query(`SELECT name, phone FROM companies WHERE id = $1`, [companyId]);
     const { rows: br } = await query(`SELECT phone FROM branches WHERE id = $1`, [qrow.branch_id]);
-
+    const shareLink = generateShareLink('quotation', quotationId, companyId);
+    const pdfLink = generateSharePdfLink('quotation', quotationId, companyId);
     const variables = {
       customer_name: custName,
       company_name: co[0]?.name || 'Our dealership',
@@ -133,73 +106,39 @@ async function sendQuotationWhatsApp(req, res) {
       vehicle,
       amount: fmtRupees(qrow.total),
       valid_until: fmtDate(qrow.valid_until_date),
-      share_link: PDF_SHARE_HINT,
+      share_link: shareLink,
+      pdf_link: pdfLink,
       branch_phone: br[0]?.phone || co[0]?.phone || 'N/A',
     };
-
-    const bodyOverride = req.body?.message;
-    let previewMessage;
-    let result;
-
-    if (bodyOverride && String(bodyOverride).trim()) {
-      result = await sendCustomMessage({
-        companyId,
-        recipientPhone: phone,
-        recipientName: custName,
-        messageBody: String(bodyOverride).trim(),
-        triggeredByUserId: req.user.id,
-      });
-      previewMessage = String(bodyOverride).trim();
-    } else {
-      result = await sendWhatsApp({
-        companyId,
-        recipientPhone: phone,
-        recipientName: custName,
-        messageType: 'quotation_share',
-        referenceId: quotationId,
-        referenceType: 'quotation',
-        variables,
-        triggeredByUserId: req.user.id,
-      });
-      previewMessage = result.previewMessage;
-    }
-
-    if (!result.success) {
-      return res.status(400).json({ success: false, error: result.error, previewMessage });
-    }
-    res.json({ success: true, logId: result.logId, previewMessage });
-  } catch (err) {
-    console.error('sendQuotationWhatsApp:', err.message);
-    res.status(500).json({ error: 'Failed to send WhatsApp' });
-  }
-}
-
-async function sendCustom(req, res) {
-  try {
-    const { phone, message } = req.body || {};
-    if (!phone || !message || !String(message).trim()) {
-      return res.status(400).json({ error: 'phone and message are required' });
-    }
-    const result = await sendCustomMessage({
-      companyId: req.user.company_id,
-      recipientPhone: phone,
-      recipientName: null,
-      messageBody: String(message).trim(),
-      triggeredByUserId: req.user.id,
+    const { rows: tpl } = await query(
+      `SELECT template_body FROM whatsapp_templates
+       WHERE company_id = $1 AND message_type = 'quotation_share' AND is_active = TRUE`,
+      [companyId],
+    );
+    const previewMessage = tpl.length ? buildMessage(tpl[0].template_body, variables) : '';
+    const digits = normalizeIndianMobile(phone);
+    const whatsappUrl = digits ? buildWhatsAppOpenUrl(digits, previewMessage) : null;
+    res.json({
+      previewMessage,
+      customer_phone: phone,
+      customer_name: custName,
+      shareUrl: shareLink,
+      pdfUrl: pdfLink,
+      whatsappUrl,
     });
-    if (!result.success) {
-      return res.status(400).json({ success: false, error: result.error });
-    }
-    res.json({ success: true, logId: result.logId });
   } catch (err) {
-    console.error('sendCustom WhatsApp:', err.message);
-    res.status(500).json({ error: 'Failed to send' });
+    console.error('previewQuotationMessage:', err.message);
+    res.status(500).json({ error: 'Failed to build preview' });
   }
 }
 
 async function previewLoanMessage(req, res) {
   try {
     const { loanId } = req.params;
+    const messageType = String(req.query.messageType || 'loan_overdue').toLowerCase();
+    if (!LOAN_MSG_TYPES.has(messageType)) {
+      return res.status(400).json({ error: 'Invalid messageType' });
+    }
     const companyId = req.user.company_id;
     const { rows } = await query(
       `SELECT l.*, c.name AS customer_name, c.phone AS customer_phone,
@@ -229,18 +168,22 @@ async function previewLoanMessage(req, res) {
       branch_phone: loan.branch_phone || 'N/A',
       company_name: loan.company_name || 'Our dealership',
     };
+
     const { rows: tpl } = await query(
       `SELECT template_body FROM whatsapp_templates
-       WHERE company_id = $1 AND message_type = 'loan_overdue' AND is_active = TRUE`,
-      [companyId],
+       WHERE company_id = $1 AND message_type = $2 AND is_active = TRUE`,
+      [companyId, messageType],
     );
-    const { buildMessage } = require('../services/whatsappService');
     const previewMessage = tpl.length ? buildMessage(tpl[0].template_body, variables) : '';
+    const phone = normalizeIndianMobile(loan.customer_phone);
+    const whatsappUrl = phone ? buildWhatsAppOpenUrl(phone, previewMessage) : null;
     res.json({
       previewMessage,
       customer_phone: loan.customer_phone,
       overdue_days: calc.calendarDaysPastDue,
       last_reminder_sent: loan.last_reminder_sent,
+      messageType,
+      whatsappUrl,
     });
   } catch (err) {
     console.error('previewLoanMessage:', err.message);
@@ -248,86 +191,91 @@ async function previewLoanMessage(req, res) {
   }
 }
 
-async function sendLoanReminder(req, res) {
+/**
+ * After opening WhatsApp for a loan reminder (manual send), record last_reminder_sent.
+ */
+async function recordLoanReminderSent(req, res) {
   try {
     const { loanId } = req.params;
     const companyId = req.user.company_id;
-
     const { rows } = await query(
-      `SELECT l.*, c.name AS customer_name, c.phone AS customer_phone,
-              i.id AS invoice_id, v.make AS vehicle_make, v.model AS vehicle_model,
-              v.chassis_number, b.phone AS branch_phone, co.name AS company_name
+      `SELECT l.id, i.branch_id
        FROM loans l
-       JOIN customers c ON c.id = l.customer_id
        LEFT JOIN invoices i ON i.id = l.invoice_id
-       LEFT JOIN vehicles v ON v.id = i.vehicle_id
-       LEFT JOIN branches b ON b.id = i.branch_id
-       JOIN companies co ON co.id = l.company_id
        WHERE l.id = $1 AND l.company_id = $2 AND l.is_deleted = FALSE`,
       [loanId, companyId],
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Loan not found' });
-    const loan = rows[0];
-
-    let phone = loan.customer_phone;
-    if (req.body?.phone && String(req.body.phone).replace(/\D/g, '').length >= 10) {
-      phone = req.body.phone;
+    const { role, branch_id: userBranch } = req.user;
+    const loanBranch = rows[0].branch_id;
+    if (role === 'staff' || role === 'branch_manager') {
+      if (loanBranch && String(loanBranch) !== String(userBranch)) {
+        return res.status(403).json({ error: 'Not allowed for this branch' });
+      }
     }
-    if (!phone || !String(phone).trim()) {
-      return res.status(400).json({ error: 'Customer has no phone number on record' });
-    }
-
-    const calc = calculatePenalty(loan);
-    const chassis = loan.chassis_number ? String(loan.chassis_number).slice(-6) : '';
-    const vehicle = [loan.vehicle_make, loan.vehicle_model, chassis && `…${chassis}`].filter(Boolean).join(' ') || 'N/A';
-
-    const variables = {
-      customer_name: loan.customer_name || 'Customer',
-      vehicle,
-      due_date: fmtDate(loan.due_date),
-      overdue_days: String(calc.calendarDaysPastDue),
-      penalty: fmtRupees(calc.netPenalty),
-      penalty_per_day: fmtRupees(calc.penaltyPerDay),
-      branch_phone: loan.branch_phone || 'N/A',
-      company_name: loan.company_name || 'Our dealership',
-    };
-
-    const bodyOverride = req.body?.message;
-    let result;
-    if (bodyOverride && String(bodyOverride).trim()) {
-      result = await sendCustomMessage({
-        companyId,
-        recipientPhone: phone,
-        recipientName: loan.customer_name,
-        messageBody: String(bodyOverride).trim(),
-        triggeredByUserId: req.user.id,
-      });
-    } else {
-      result = await sendWhatsApp({
-        companyId,
-        recipientPhone: phone,
-        recipientName: loan.customer_name,
-        messageType: 'loan_overdue',
-        referenceId: loanId,
-        referenceType: 'loan',
-        variables,
-        triggeredByUserId: req.user.id,
-      });
-    }
-
-    if (!result.success) {
-      return res.status(400).json({ success: false, error: result.error });
-    }
-
     await query(
       `UPDATE loans SET last_reminder_sent = CURRENT_DATE, updated_at = NOW() WHERE id = $1`,
       [loanId],
     );
-
-    res.json({ success: true, logId: result.logId, previewMessage: result.previewMessage });
+    res.json({ ok: true });
   } catch (err) {
-    console.error('sendLoanReminder:', err.message);
-    res.status(500).json({ error: 'Failed to send reminder' });
+    console.error('recordLoanReminderSent:', err.message);
+    res.status(500).json({ error: 'Failed to update' });
+  }
+}
+
+async function listPendingTasks(req, res) {
+  try {
+    const tasks = await listOpenTasksForUser(req.user);
+    res.json({ tasks });
+  } catch (err) {
+    console.error('listPendingTasks:', err.message);
+    res.status(500).json({ error: 'Failed to load tasks' });
+  }
+}
+
+async function dismissPendingTask(req, res) {
+  try {
+    const { id } = req.params;
+    const task = await getTaskForCompany(id, req.user.company_id);
+    if (!task || task.dismissed_at) return res.status(404).json({ error: 'Task not found' });
+    if (!branchAllowedForTask(req, task)) return res.status(403).json({ error: 'Not allowed' });
+    const row = await dismissTask(id, req.user.company_id);
+    if (!row) return res.status(404).json({ error: 'Task not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('dismissPendingTask:', err.message);
+    res.status(500).json({ error: 'Failed to dismiss' });
+  }
+}
+
+/**
+ * Dismiss + mark loan reminder date (for loan_overdue / loan_due_soon only).
+ */
+async function completePendingReminderTask(req, res) {
+  try {
+    const { id } = req.params;
+    const task = await getTaskForCompany(id, req.user.company_id);
+    if (!task || task.dismissed_at) return res.status(404).json({ error: 'Task not found' });
+    if (!branchAllowedForTask(req, task)) return res.status(403).json({ error: 'Not allowed' });
+
+    await dismissTask(id, req.user.company_id);
+
+    if (task.message_type === 'loan_overdue' || task.message_type === 'loan_due_soon') {
+      await query(
+        `UPDATE loans SET
+           last_reminder_sent = CURRENT_DATE,
+           status = CASE WHEN status = 'active' AND due_date < CURRENT_DATE THEN 'overdue'::loan_status ELSE status END,
+           updated_at = NOW()
+         WHERE id = $1`,
+        [task.loan_id],
+      );
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('completePendingReminderTask:', err.message);
+    res.status(500).json({ error: 'Failed to complete' });
   }
 }
 
@@ -445,89 +393,16 @@ async function updateTemplate(req, res) {
   }
 }
 
-async function previewInvoiceMessage(req, res) {
-  try {
-    const { invoiceId } = req.params;
-    const companyId = req.user.company_id;
-    const data = await ic.fetchFullInvoice(invoiceId, companyId);
-    if (!data) return res.status(404).json({ error: 'Invoice not found' });
-    const inv = data.invoice;
-    const vehicle = [inv.vehicle_make, inv.vehicle_model].filter(Boolean).join(' ') || 'N/A';
-    const variables = {
-      customer_name: inv.customer_name || 'Customer',
-      company_name: inv.company_name || 'Our dealership',
-      invoice_number: inv.invoice_number,
-      vehicle,
-      amount: fmtRupees(inv.total),
-      share_link: PDF_SHARE_HINT,
-      branch_phone: inv.branch_phone || inv.company_phone || 'N/A',
-    };
-    const { rows: tpl } = await query(
-      `SELECT template_body FROM whatsapp_templates
-       WHERE company_id = $1 AND message_type = 'invoice_share' AND is_active = TRUE`,
-      [companyId],
-    );
-    const { buildMessage } = require('../services/whatsappService');
-    const previewMessage = tpl.length ? buildMessage(tpl[0].template_body, variables) : '';
-    res.json({
-      previewMessage,
-      customer_phone: inv.customer_phone,
-      customer_name: inv.customer_name,
-    });
-  } catch (err) {
-    console.error('previewInvoiceMessage:', err.message);
-    res.status(500).json({ error: 'Failed to build preview' });
-  }
-}
-
-async function previewQuotationMessage(req, res) {
-  try {
-    const { quotationId } = req.params;
-    const companyId = req.user.company_id;
-    const bundle = await loadQuotationBundle(quotationId, companyId);
-    if (!bundle || bundle.quotation.is_deleted) {
-      return res.status(404).json({ error: 'Quotation not found' });
-    }
-    const qrow = bundle.quotation;
-    const phone = qrow.customer_phone_override || bundle.customer?.phone;
-    const custName = qrow.customer_name_override || bundle.customer?.name || 'Customer';
-    const vehicle = [qrow.vehicle_make, qrow.vehicle_model].filter(Boolean).join(' ') || 'N/A';
-    const { rows: co } = await query(`SELECT name, phone FROM companies WHERE id = $1`, [companyId]);
-    const { rows: br } = await query(`SELECT phone FROM branches WHERE id = $1`, [qrow.branch_id]);
-    const variables = {
-      customer_name: custName,
-      company_name: co[0]?.name || 'Our dealership',
-      quotation_number: qrow.quotation_number,
-      vehicle,
-      amount: fmtRupees(qrow.total),
-      valid_until: fmtDate(qrow.valid_until_date),
-      share_link: PDF_SHARE_HINT,
-      branch_phone: br[0]?.phone || co[0]?.phone || 'N/A',
-    };
-    const { rows: tpl } = await query(
-      `SELECT template_body FROM whatsapp_templates
-       WHERE company_id = $1 AND message_type = 'quotation_share' AND is_active = TRUE`,
-      [companyId],
-    );
-    const { buildMessage } = require('../services/whatsappService');
-    const previewMessage = tpl.length ? buildMessage(tpl[0].template_body, variables) : '';
-    res.json({ previewMessage, customer_phone: phone, customer_name: custName });
-  } catch (err) {
-    console.error('previewQuotationMessage:', err.message);
-    res.status(500).json({ error: 'Failed to build preview' });
-  }
-}
-
 module.exports = {
-  sendInvoiceWhatsApp,
-  sendQuotationWhatsApp,
-  sendCustom,
+  previewInvoiceMessage,
+  previewQuotationMessage,
   previewLoanMessage,
-  sendLoanReminder,
+  recordLoanReminderSent,
+  listPendingTasks,
+  dismissPendingTask,
+  completePendingReminderTask,
   listLogs,
   logsForInvoice,
   listTemplates,
   updateTemplate,
-  previewInvoiceMessage,
-  previewQuotationMessage,
 };

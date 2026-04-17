@@ -21,17 +21,6 @@ function formatPhone(phone) {
 }
 
 /**
- * Send WhatsApp message via Twilio.
- * Returns { success, sid? } or { success: false, reason }.
- */
-async function sendWhatsApp(phone, message) {
-  const { sendRawWhatsApp } = require('./whatsappService');
-  const r = await sendRawWhatsApp(phone, message);
-  if (r.success) return { success: true, sid: r.sid };
-  return { success: false, reason: r.reason || 'send_failed' };
-}
-
-/**
  * Send SMS via 2Factor API (or Fast2SMS as fallback).
  * Returns { success, ... } or { success: false, reason }.
  */
@@ -83,18 +72,12 @@ async function sendTemplatedNotification(templateKey, params, phone) {
 
   const message = templateFn(params);
 
-  // Try WhatsApp first
-  const waResult = await sendWhatsApp(phone, message);
-  if (waResult.success) return { ...waResult, channel: 'whatsapp' };
-
-  // Fallback to SMS
   const smsResult = await sendSMS(phone, message);
   return { ...smsResult, channel: 'sms' };
 }
 
 module.exports = {
   TEMPLATES,
-  sendWhatsApp,
   sendSMS,
   sendTemplatedNotification,
   formatPhone,

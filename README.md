@@ -271,9 +271,8 @@ cd /home/deploy/vehicle-erp
 | `CORS_ORIGIN` | No | `http://localhost:5173` | Allowed CORS origin |
 | `UPLOAD_DIR` | No | `./uploads` | Local file upload directory |
 | `MAX_FILE_SIZE` | No | `5242880` | Max upload size in bytes (5MB) |
-| `TWILIO_ACCOUNT_SID` | No | — | Twilio account SID for WhatsApp |
-| `TWILIO_AUTH_TOKEN` | No | — | Twilio auth token |
-| `TWILIO_WHATSAPP_FROM` | No | — | Twilio WhatsApp sender number |
+| `PUBLIC_APP_URL` | No | `CORS_ORIGIN` | Base URL embedded in invoice/quotation share links for WhatsApp |
+| `SHARE_SECRET` | No | `JWT_SECRET` | Secret for signing share-link JWTs |
 | `TWO_FACTOR_API_KEY` | No | — | 2Factor.in API key for SMS |
 | `MASTERS_INDIA_ENV` | No | `sandbox` | `sandbox` or `production` (API host for e-invoice / e-way) |
 | `MASTERS_INDIA_API_KEY` | No* | — | Profile API key (`api_key` header). Opaque keys are not JWTs — pair with username/password so the app can obtain `Authorization: JWT`. *Required if not using username/password |

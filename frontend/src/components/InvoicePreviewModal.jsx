@@ -147,7 +147,7 @@ export default function InvoicePreviewModal({
             onClick={() => setWaOpen((v) => !v)}
           >
             {waOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
-            WhatsApp History
+            WhatsApp (legacy log)
             {!waLoading && waLogs.length > 0 && (
               <span className="text-muted-foreground font-normal">({waLogs.length})</span>
             )}
@@ -159,7 +159,7 @@ export default function InvoicePreviewModal({
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
               ) : waLogs.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-1">No WhatsApp messages logged for this invoice yet.</p>
+                <p className="text-xs text-muted-foreground py-1">No server-side delivery log. Messages are composed on your device via WhatsApp.</p>
               ) : (
                 waLogs.map((log) => {
                   const st = waStatusBadge(log.status);

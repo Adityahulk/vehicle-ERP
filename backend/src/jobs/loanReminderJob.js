@@ -2,7 +2,8 @@ const { Queue, Worker } = require('bullmq');
 const redis = require('../config/redis');
 const { query } = require('../config/db');
 const { calculatePenalty } = require('../services/penaltyService');
-const { sendWhatsApp, sendCustomMessage } = require('../services/whatsappService');
+const { insertPendingTask } = require('../services/whatsappPendingTasksService');
+const { sendSMS } = require('../services/notificationService');
 
 const QUEUE_NAME = 'loan-overdue-reminders';
 
@@ -28,65 +29,6 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-function fmtRupees(paise) {
-  return (Number(paise || 0) / 100).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-async function handlePenaltyMilestone(data) {
-  const { loanId, reason } = data;
-  const { rows } = await query(
-    `SELECT l.*, c.name AS customer_name, c.phone AS customer_phone,
-            v.make AS vehicle_make, v.model AS vehicle_model, v.chassis_number,
-            b.phone AS branch_phone, co.name AS company_name
-     FROM loans l
-     JOIN customers c ON c.id = l.customer_id
-     LEFT JOIN invoices i ON i.id = l.invoice_id
-     LEFT JOIN vehicles v ON v.id = i.vehicle_id
-     LEFT JOIN branches b ON b.id = i.branch_id
-     JOIN companies co ON co.id = l.company_id
-     WHERE l.id = $1 AND l.is_deleted = FALSE`,
-    [loanId],
-  );
-  if (rows.length === 0) return { skipped: true, reason: 'loan_not_found' };
-  const loan = rows[0];
-  if (!loan.customer_phone || !String(loan.customer_phone).trim()) {
-    return { skipped: true, reason: 'no_phone' };
-  }
-
-  const calc = calculatePenalty(loan);
-  const chassis = loan.chassis_number ? String(loan.chassis_number).slice(-6) : '';
-  const vehicle = [loan.vehicle_make, loan.vehicle_model, chassis && `…${chassis}`]
-    .filter(Boolean)
-    .join(' ') || 'N/A';
-
-  const variables = {
-    customer_name: loan.customer_name || 'Customer',
-    vehicle,
-    due_date: fmtDate(loan.due_date),
-    overdue_days: String(calc.calendarDaysPastDue),
-    penalty: fmtRupees(calc.netPenalty),
-    penalty_per_day: fmtRupees(calc.penaltyPerDay),
-    branch_phone: loan.branch_phone || 'N/A',
-    company_name: loan.company_name || 'Our dealership',
-  };
-
-  const result = await sendWhatsApp({
-    companyId: loan.company_id,
-    recipientPhone: loan.customer_phone,
-    recipientName: loan.customer_name,
-    messageType: 'loan_penalty_alert',
-    referenceId: loan.id,
-    referenceType: 'loan',
-    variables,
-    triggeredByUserId: null,
-  });
-
-  return { sent: result.success, logId: result.logId, reason, error: result.error };
-}
-
 async function alertCompanyAdmins(companyId, summary) {
   const { rows } = await query(
     `SELECT phone, name FROM users
@@ -95,17 +37,12 @@ async function alertCompanyAdmins(companyId, summary) {
     [companyId],
   );
   const msg =
-    `[MVG ERP] Loan reminder job had failures today.\n` +
-    `Processed: ${summary.processed}, Sent: ${summary.sent}, Failed: ${summary.failed}.\n` +
-    `Check WhatsApp logs in the app.`;
+    `[MVG ERP] Loan reminder queue: processed ${summary.processed}, ` +
+    `pending tasks created ${summary.tasksCreated}, skipped ${summary.skipped}.`;
   for (const u of rows) {
-    await sendCustomMessage({
-      companyId,
-      recipientPhone: u.phone,
-      recipientName: u.name,
-      messageBody: msg,
-      triggeredByUserId: null,
-    });
+    await sendSMS(u.phone, msg).catch((e) =>
+      console.error('[LoanReminderJob] Admin SMS failed:', e.message),
+    );
   }
 }
 
@@ -131,14 +68,8 @@ async function scheduleLoanReminderJob() {
 function createLoanReminderWorker() {
   const worker = new Worker(
     QUEUE_NAME,
-    async (job) => {
-      if (job.name === 'penalty-milestone') {
-        const out = await handlePenaltyMilestone(job.data || {});
-        await new Promise((r) => setTimeout(r, 500));
-        return out;
-      }
-
-      console.log('[LoanReminderJob] Running overdue loan WhatsApp reminders...');
+    async () => {
+      console.log('[LoanReminderJob] Running overdue loan reminder task queue…');
       const { rows: loans } = await query(
         `SELECT l.*, c.name AS customer_name, c.phone AS customer_phone,
                 i.branch_id, v.make AS vehicle_make, v.model AS vehicle_model, v.chassis_number,
@@ -156,9 +87,8 @@ function createLoanReminderWorker() {
       );
 
       let processed = 0;
-      let sent = 0;
-      let failed = 0;
-      const errors = [];
+      let tasksCreated = 0;
+      let skipped = 0;
       const failedCompanies = new Set();
 
       for (const loan of loans) {
@@ -178,51 +108,32 @@ function createLoanReminderWorker() {
 
         processed += 1;
         const chassis = loan.chassis_number ? String(loan.chassis_number).slice(-6) : '';
-        const vehicle = [loan.vehicle_make, loan.vehicle_model, chassis && `…${chassis}`]
-          .filter(Boolean)
-          .join(' ') || 'N/A';
+        const titlePrefix = messageType === 'loan_due_soon' ? 'Payment due soon' : 'Loan overdue';
+        const title = `${titlePrefix} — ${loan.customer_name || 'Customer'}`;
 
-        const variables = {
-          customer_name: loan.customer_name || 'Customer',
-          vehicle,
-          due_date: fmtDate(loan.due_date),
-          overdue_days: String(calc.calendarDaysPastDue),
-          penalty: fmtRupees(calc.netPenalty),
-          penalty_per_day: fmtRupees(calc.penaltyPerDay),
-          branch_phone: loan.branch_phone || 'N/A',
-          company_name: loan.company_name || 'Our dealership',
-        };
-
-        const result = await sendWhatsApp({
-          companyId: loan.company_id,
-          recipientPhone: loan.customer_phone,
-          recipientName: loan.customer_name,
-          messageType,
-          referenceId: loan.id,
-          referenceType: 'loan',
-          variables,
-          triggeredByUserId: null,
-        });
-
-        if (result.success) {
-          sent += 1;
-          await query(
-            `UPDATE loans SET last_reminder_sent = CURRENT_DATE,
-             status = CASE WHEN status = 'active' THEN 'overdue'::loan_status ELSE status END,
-             updated_at = NOW()
-             WHERE id = $1`,
-            [loan.id],
-          );
-        } else {
-          failed += 1;
-          errors.push({ loanId: loan.id, error: result.error });
+        try {
+          await insertPendingTask({
+            companyId: loan.company_id,
+            branchId: loan.branch_id,
+            loanId: loan.id,
+            messageType,
+            title,
+            detail: `Due ${fmtDate(loan.due_date)}`,
+            customerName: loan.customer_name,
+            customerPhone: loan.customer_phone,
+            meta: { source: 'loan_reminder_job' },
+          });
+          tasksCreated += 1;
+        } catch (e) {
+          console.error('[LoanReminderJob] insertPendingTask failed:', loan.id, e.message);
           failedCompanies.add(loan.company_id);
+          skipped += 1;
         }
 
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 50));
       }
 
-      const summary = { processed, sent, failed, errors };
+      const summary = { processed, tasksCreated, skipped };
       console.log('[LoanReminderJob] Done:', summary);
 
       for (const cid of failedCompanies) {

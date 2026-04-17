@@ -3,9 +3,12 @@ const { query } = require('../config/db');
 
 const PLACEHOLDER_RE = /\{(\w+)\}/g;
 
+/** Keep wa.me URLs under typical browser limits */
+const WHATSAPP_URL_TEXT_MAX = 1800;
+
 const ALL_KNOWN_KEYS = new Set([
   'customer_name', 'vehicle', 'amount', 'due_date', 'overdue_days', 'penalty', 'penalty_per_day',
-  'invoice_number', 'quotation_number', 'share_link', 'valid_until', 'branch_phone', 'company_name',
+  'invoice_number', 'quotation_number', 'share_link', 'pdf_link', 'valid_until', 'branch_phone', 'company_name',
 ]);
 
 /**
@@ -69,181 +72,49 @@ function generateSharePdfLink(type, id, companyId) {
   return `${publicBaseUrl()}${path}`;
 }
 
-async function sendViaProvider(toDigits10, messageText, mediaUrl = null) {
-  const provider = (process.env.WHATSAPP_PROVIDER || 'mock').toLowerCase();
-
-  if (provider === 'mock') {
-    console.log('[WhatsApp MOCK] To:', toDigits10, 'Message:', messageText.slice(0, 120) + (messageText.length > 120 ? '…' : ''));
-    return { success: true, provider_message_id: `mock_${Date.now()}` };
+/**
+ * Opens WhatsApp (app or web) with prefilled text. Attachments are not supported via URL;
+ * include PDF/share links inside the message body.
+ * @returns {string|null} https://wa.me/91XXXXXXXXXX?text=...
+ */
+function buildWhatsAppOpenUrl(digits10, messageText) {
+  const d = String(digits10 || '').replace(/\D/g, '');
+  const n = d.length === 10 ? d : '';
+  if (!n) return null;
+  let t = String(messageText || '');
+  if (t.length > WHATSAPP_URL_TEXT_MAX) {
+    t = `${t.slice(0, WHATSAPP_URL_TEXT_MAX - 30)}\n…(message truncated — edit in WhatsApp if needed)`;
   }
-
-  if (provider === 'waba') {
-    return { success: false, error: 'WhatsApp Business API (waba) is not implemented yet' };
-  }
-
-  if (provider !== 'twilio') {
-    return { success: false, error: `Unknown WHATSAPP_PROVIDER: ${provider}` };
-  }
-
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const fromRaw = process.env.TWILIO_WHATSAPP_FROM || process.env.TWILIO_WHATSAPP_NUMBER;
-  if (!accountSid || !authToken || !fromRaw) {
-    return { success: false, error: 'Twilio WhatsApp env vars missing' };
-  }
-
-  const fromNorm = String(fromRaw).replace(/^whatsapp:/i, '').trim();
-  const toWa = `whatsapp:+91${toDigits10}`;
-
-  try {
-    const twilio = require('twilio')(accountSid, authToken);
-    const msgPayload = {
-      body: messageText,
-      from: fromNorm.startsWith('+') ? `whatsapp:${fromNorm}` : `whatsapp:+${fromNorm.replace(/^\+/, '')}`,
-      to: toWa,
-    };
-    if (mediaUrl) {
-      msgPayload.mediaUrl = [mediaUrl];
-    }
-    const result = await twilio.messages.create(msgPayload);
-    return { success: true, provider_message_id: result.sid };
-  } catch (err) {
-    return { success: false, error: err.message || String(err) };
-  }
+  return `https://wa.me/91${n}?text=${encodeURIComponent(t)}`;
 }
 
 /**
- * Send templated WhatsApp, log row, return { success, logId?, error? }
+ * Build message from DB template (no network send).
  */
-async function sendWhatsApp({
+async function composeTemplatedMessage({
   companyId,
-  recipientPhone,
-  recipientName,
   messageType,
-  referenceId = null,
-  referenceType = null,
-  variables = {},
-  triggeredByUserId = null,
-  mediaUrl = null,
+  variables,
 }) {
-  const mobile = normalizeIndianMobile(recipientPhone);
-  if (!mobile) {
-    console.error('[WhatsApp] Invalid phone:', recipientPhone);
-    return { success: false, error: 'Invalid phone number' };
-  }
-
   const { rows: tplRows } = await query(
-    `SELECT id, template_body FROM whatsapp_templates
+    `SELECT template_body FROM whatsapp_templates
      WHERE company_id = $1 AND message_type = $2 AND is_active = TRUE`,
     [companyId, messageType],
   );
   if (tplRows.length === 0) {
     return { success: false, error: `No active template for message type: ${messageType}` };
   }
-
   const text = buildMessage(tplRows[0].template_body, variables);
-  const prov = await sendViaProvider(mobile, text, mediaUrl);
-  const status = prov.success ? 'sent' : 'failed';
-  const now = new Date().toISOString();
-
-  const { rows: logRows } = await query(
-    `INSERT INTO whatsapp_logs (
-       company_id, user_id, recipient_phone, recipient_name, message_type,
-       reference_id, reference_type, message_body, status,
-       provider_message_id, error_message, sent_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-     RETURNING id`,
-    [
-      companyId,
-      triggeredByUserId || null,
-      `+91${mobile}`,
-      recipientName || null,
-      messageType,
-      referenceId,
-      referenceType,
-      text,
-      status,
-      prov.provider_message_id || null,
-      prov.success ? null : (prov.error || 'send failed'),
-      prov.success ? now : null,
-    ],
-  );
-
-  return {
-    success: prov.success,
-    logId: logRows[0]?.id,
-    error: prov.success ? undefined : prov.error,
-    previewMessage: text,
-  };
+  return { success: true, message: text };
 }
 
 /**
- * Simple send without DB template (custom / internal).
+ * Custom body only (no DB template).
  */
-async function sendCustomMessage({
-  companyId,
-  recipientPhone,
-  recipientName,
-  messageBody,
-  triggeredByUserId = null,
-  mediaUrl = null,
-}) {
-  const mobile = normalizeIndianMobile(recipientPhone);
-  if (!mobile) {
-    return { success: false, error: 'Invalid phone number' };
-  }
-  const prov = await sendViaProvider(mobile, messageBody, mediaUrl);
-  const now = new Date().toISOString();
-  const status = prov.success ? 'sent' : 'failed';
-  const { rows: logRows } = await query(
-    `INSERT INTO whatsapp_logs (
-       company_id, user_id, recipient_phone, recipient_name, message_type,
-       reference_id, reference_type, message_body, status,
-       provider_message_id, error_message, sent_at
-     ) VALUES ($1,$2,$3,$4,'custom',NULL,NULL,$5,$6,$7,$8,$9)
-     RETURNING id`,
-    [
-      companyId,
-      triggeredByUserId || null,
-      `+91${mobile}`,
-      recipientName || null,
-      messageBody,
-      status,
-      prov.provider_message_id || null,
-      prov.success ? null : (prov.error || 'send failed'),
-      prov.success ? now : null,
-    ],
-  );
-  return { success: prov.success, logId: logRows[0]?.id, error: prov.error };
-}
-
-async function sendBulkWhatsApp(messages) {
-  let sent = 0;
-  let failed = 0;
-  const errors = [];
-  for (let i = 0; i < messages.length; i += 1) {
-    const m = messages[i];
-    const r = await sendWhatsApp(m);
-    if (r.success) sent += 1;
-    else {
-      failed += 1;
-      errors.push({ index: i, error: r.error });
-    }
-    if (i < messages.length - 1) {
-      await new Promise((res) => setTimeout(res, 500));
-    }
-  }
-  return { sent, failed, errors };
-}
-
-/** Raw Twilio/mock send for legacy callers (no template log). */
-async function sendRawWhatsApp(phone, message) {
-  const mobile = normalizeIndianMobile(phone);
-  if (!mobile) return { success: false, reason: 'invalid_phone' };
-  const prov = await sendViaProvider(mobile, message);
-  return prov.success
-    ? { success: true, sid: prov.provider_message_id }
-    : { success: false, reason: prov.error };
+function composeCustomMessageBody(messageBody) {
+  const t = String(messageBody || '').trim();
+  if (!t) return { success: false, error: 'Message is empty' };
+  return { success: true, message: t };
 }
 
 function extractPlaceholders(body) {
@@ -279,14 +150,11 @@ module.exports = {
   buildMessage,
   normalizeIndianMobile,
   generateShareLink,
-  sendWhatsApp,
-  sendCustomMessage,
-  sendBulkWhatsApp,
-  sendRawWhatsApp,
-  generateShareLink,
   generateSharePdfLink,
+  buildWhatsAppOpenUrl,
+  composeTemplatedMessage,
+  composeCustomMessageBody,
   validateTemplatePlaceholders,
-  buildMessage,
   shareSecret,
   publicBaseUrl,
 };

@@ -213,10 +213,8 @@ CORS_ORIGIN=https://erp.yourdomain.com
 UPLOAD_DIR=./uploads
 MAX_FILE_SIZE=5242880
 
-# Optional — fill when ready
-TWILIO_ACCOUNT_SID=
-TWILIO_AUTH_TOKEN=
-TWILIO_WHATSAPP_FROM=
+# Optional — fill when ready (SMS; WhatsApp uses wa.me + share links, no Twilio)
+PUBLIC_APP_URL=https://erp.yourdomain.com
 TWO_FACTOR_API_KEY=
 ```
 

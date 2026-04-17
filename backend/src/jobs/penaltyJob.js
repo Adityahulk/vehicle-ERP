@@ -2,7 +2,7 @@ const { Queue, Worker } = require('bullmq');
 const redis = require('../config/redis');
 const { query } = require('../config/db');
 const { updateLoanPenalties } = require('../services/penaltyService');
-const { loanReminderQueue } = require('./loanReminderJob');
+const { insertPenaltyMilestoneTasks } = require('../services/whatsappPendingTasksService');
 
 const QUEUE_NAME = 'penalty-processing';
 
@@ -49,12 +49,9 @@ function createPenaltyWorker() {
         console.error('[PenaltyJob] job_logs insert failed:', e.message);
       }
 
-      for (const m of result.milestones || []) {
-        await loanReminderQueue.add('penalty-milestone', m, {
-          removeOnComplete: 80,
-          removeOnFail: 30,
-        });
-      }
+      await insertPenaltyMilestoneTasks(result.milestones || []).catch((e) =>
+        console.error('[PenaltyJob] insertPenaltyMilestoneTasks:', e.message),
+      );
 
       return result;
     },
