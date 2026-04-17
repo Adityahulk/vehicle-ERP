@@ -590,9 +590,9 @@ async function seed() {
 
     // ── 7b. WhatsApp pending-task queue (demo — matches loan reminder / penalty flows) ──
     // The daily job also creates these when Redis+worker run; seed inserts so UI can be tested without waiting.
+    // branch_id is NULL so every branch_manager in the company sees these (listOpenTasksForUser OR branch match).
     const { rows: waLoans } = await client.query(
-      `SELECT l.id, l.company_id, i.branch_id, c.name AS customer_name, c.phone AS customer_phone,
-              l.due_date
+      `SELECT l.id, l.company_id, c.name AS customer_name, c.phone AS customer_phone, l.due_date
        FROM loans l
        JOIN customers c ON c.id = l.customer_id
        JOIN invoices i ON i.id = l.invoice_id
@@ -614,10 +614,9 @@ async function seed() {
         `INSERT INTO whatsapp_pending_tasks (
            company_id, branch_id, loan_id, message_type, title, detail,
            customer_name, customer_phone, meta
-         ) VALUES ($1, $2, $3, 'loan_overdue', $4, $5, $6, $7, $8::jsonb)`,
+         ) VALUES ($1, NULL, $2, 'loan_overdue', $3, $4, $5, $6, $7::jsonb)`,
         [
           L.company_id,
-          L.branch_id,
           L.id,
           `Loan overdue — ${L.customer_name}`,
           `Due ${fmtDue(L.due_date)}`,
@@ -633,10 +632,9 @@ async function seed() {
         `INSERT INTO whatsapp_pending_tasks (
            company_id, branch_id, loan_id, message_type, title, detail,
            customer_name, customer_phone, meta
-         ) VALUES ($1, $2, $3, 'loan_penalty_alert', $4, $5, $6, $7, $8::jsonb)`,
+         ) VALUES ($1, NULL, $2, 'loan_penalty_alert', $3, $4, $5, $6, $7::jsonb)`,
         [
           L.company_id,
-          L.branch_id,
           L.id,
           `Penalty — ${L.customer_name}`,
           'Weekly penalty reminder (demo seed)',

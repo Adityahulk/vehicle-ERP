@@ -14,11 +14,12 @@ export default function PendingWhatsAppTasks() {
   const qc = useQueryClient();
   const canSee = CAN_SEE.includes(user?.role);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['whatsapp-pending-tasks'],
     queryFn: () => api.get('/whatsapp/pending-tasks').then((r) => r.data),
     enabled: !!canSee,
     refetchInterval: 120_000,
+    retry: 1,
   });
 
   const completeMut = useMutation({
@@ -73,8 +74,28 @@ export default function PendingWhatsAppTasks() {
       <CardContent>
         {isLoading ? (
           <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        ) : isError ? (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-3 text-sm space-y-2">
+            <p className="text-destructive font-medium">Could not load WhatsApp queue</p>
+            <p className="text-muted-foreground text-xs">
+              {error?.response?.status === 403
+                ? 'Your role may not have access (managers and company admins only).'
+                : error?.response?.data?.error || error?.message || 'Request failed.'}
+            </p>
+            <p className="text-muted-foreground text-xs">
+              If you just re-ran database seed, log out and log in again so your session matches the new company data.
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={() => refetch()}>
+              Retry
+            </Button>
+          </div>
         ) : tasks.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4">No pending WhatsApp reminders</p>
+          <div className="space-y-2 text-center py-4">
+            <p className="text-sm text-muted-foreground">No pending WhatsApp reminders</p>
+            <p className="text-xs text-muted-foreground">
+              After reseeding, log out and back in. Branch-only tasks also require your branch to match the loan invoice.
+            </p>
+          </div>
         ) : (
           <ul className="space-y-2 max-h-80 overflow-y-auto">
             {tasks.map((t) => (
