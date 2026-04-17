@@ -588,6 +588,65 @@ async function seed() {
       [companyId, confirmedInvoiceIds[3], customerIds[3], od2.toISOString().slice(0, 10)],
     );
 
+    // ── 7b. WhatsApp pending-task queue (demo — matches loan reminder / penalty flows) ──
+    // The daily job also creates these when Redis+worker run; seed inserts so UI can be tested without waiting.
+    const { rows: waLoans } = await client.query(
+      `SELECT l.id, l.company_id, i.branch_id, c.name AS customer_name, c.phone AS customer_phone,
+              l.due_date
+       FROM loans l
+       JOIN customers c ON c.id = l.customer_id
+       JOIN invoices i ON i.id = l.invoice_id
+       WHERE l.company_id = $1 AND l.status = 'overdue'
+         AND l.is_deleted = FALSE
+         AND l.due_date < CURRENT_DATE
+         AND c.phone IS NOT NULL AND TRIM(c.phone) <> ''
+       ORDER BY l.due_date ASC
+       LIMIT 2`,
+      [companyId],
+    );
+    const fmtDue = (d) => {
+      if (!d) return 'N/A';
+      return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    };
+    if (waLoans.length >= 1) {
+      const L = waLoans[0];
+      await client.query(
+        `INSERT INTO whatsapp_pending_tasks (
+           company_id, branch_id, loan_id, message_type, title, detail,
+           customer_name, customer_phone, meta
+         ) VALUES ($1, $2, $3, 'loan_overdue', $4, $5, $6, $7, $8::jsonb)`,
+        [
+          L.company_id,
+          L.branch_id,
+          L.id,
+          `Loan overdue — ${L.customer_name}`,
+          `Due ${fmtDue(L.due_date)}`,
+          L.customer_name,
+          L.customer_phone,
+          JSON.stringify({ source: 'seed', note: 'demo loan_overdue queue item' }),
+        ],
+      );
+    }
+    if (waLoans.length >= 2) {
+      const L = waLoans[1];
+      await client.query(
+        `INSERT INTO whatsapp_pending_tasks (
+           company_id, branch_id, loan_id, message_type, title, detail,
+           customer_name, customer_phone, meta
+         ) VALUES ($1, $2, $3, 'loan_penalty_alert', $4, $5, $6, $7, $8::jsonb)`,
+        [
+          L.company_id,
+          L.branch_id,
+          L.id,
+          `Penalty — ${L.customer_name}`,
+          'Weekly penalty reminder (demo seed)',
+          L.customer_name,
+          L.customer_phone,
+          JSON.stringify({ source: 'seed', note: 'demo loan_penalty_alert queue item', reason: 'every_7_days' }),
+        ],
+      );
+    }
+
     // ── 8. Quotations (mixed statuses) ─────────────────────
     const qBranch = (i) => (i % 2 === 0 ? mapusa.id : panaji.id);
     const quotationSpecs = [
@@ -707,7 +766,7 @@ async function seed() {
     console.log(`  ║  Vehicles: ${VEHICLE_DATA.length} (${VEHICLE_DATA.length - soldCount} in stock, ${soldCount} sold)              ║`);
     console.log(`  ║  Customers: ${CUSTOMER_ROWS.length} · Invoices: ${soldCount} confirmed + draft + cancelled ║`);
     console.log('  ║  Loans   : 4 (overdue, active, closed mix)            ║');
-    console.log('  ║  Quotations: 5 · Expenses: 18 sample entries          ║');
+    console.log('  ║  Quotations: 5 · Expenses: 18 · WhatsApp queue: 2 demo tasks ║');
     console.log('  ║                                                       ║');
     console.log('  ╠═══════════════════════════════════════════════════════╣');
     console.log('  ║  Login credentials (all use password: VehicleERP@2026) ║');
