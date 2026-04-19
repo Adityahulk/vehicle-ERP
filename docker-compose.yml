@@ -99,8 +99,8 @@ services:
       erp:
         ipv4_address: 172.29.44.12
 
-  # Single definition — do NOT merge a second compose file for nginx (duplicate ports break binds).
-  # Before certs exist: temporarily swap volumes to nginx-no-ssl.conf and only port "80:80", then certbot, then restore.
+  # Default: HTTP only — nginx crashes if nginx.conf + /etc/letsencrypt are used before certs exist.
+  # After: sudo ls /etc/letsencrypt/live/microtechnique.in/ — replace this `nginx` block with nginx/HTTPS-COMPOSE-SNIPPET.yml
   nginx:
     image: nginx:alpine
     container_name: vehicle_erp_nginx
@@ -108,10 +108,8 @@ services:
     networks: [erp]
     ports:
       - "80:80"
-      - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./nginx/nginx-no-ssl.conf:/etc/nginx/conf.d/default.conf:ro
       - /var/www/certbot:/var/www/certbot:ro
     depends_on:
       api:

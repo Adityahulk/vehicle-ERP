@@ -44,7 +44,7 @@ docker compose exec api npm run migrate
 docker compose exec api npm run seed
 ```
 
-**Docker + HTTPS (production):** **`docker-compose.yml`** defines **`nginx`** once with **80+443**, **`nginx/nginx.conf`**, and mounts **`/etc/letsencrypt`** + **`/var/www/certbot`**. **Do not** merge a second compose file for nginx — duplicate **`ports`** entries break binding. **First-time certbot:** temporarily edit the `nginx` service to use **`nginx-no-ssl.conf`**, **`ports` `80:80` only**, and drop the **`/etc/letsencrypt`** mount; run `docker compose up -d`, then `certbot certonly --webroot -w /var/www/certbot -d …`. After **`/etc/letsencrypt/live/<domain>/`** exists, restore the TLS **`nginx` block from git**, run `docker compose up -d --force-recreate nginx`, and set **`CORS_ORIGIN`** / **`PUBLIC_APP_URL`** to **`https://…`** in `.env`.
+**Docker + HTTPS:** Default **`docker-compose.yml`** uses **HTTP only** (`nginx-no-ssl.conf`, port **80**, **`/var/www/certbot`**) so nginx does not crash when certs are missing. Run **certbot** (`certonly --webroot -w /var/www/certbot -d …`). When **`/etc/letsencrypt/live/<domain>/fullchain.pem`** exists, **replace** the `nginx` service in **`docker-compose.yml`** with the block in **`nginx/HTTPS-COMPOSE-SNIPPET.yml`** (do not merge a second compose file for nginx). Then `docker compose up -d --force-recreate nginx`, **`ufw allow 443`**, and set **`CORS_ORIGIN`** / **`PUBLIC_APP_URL`** to **`https://…`**.
 
 **Option B — System-installed:**
 
