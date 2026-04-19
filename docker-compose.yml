@@ -99,7 +99,8 @@ services:
       erp:
         ipv4_address: 172.29.44.12
 
-  # TLS: host must have /etc/letsencrypt and (for renewals) /var/www/certbot — see README Docker HTTPS.
+  # HTTP + ACME webroot until certs exist. After certbot, replace this block with the
+  # `nginx` service from docker-compose.tls.yml (or merge that file — see README).
   nginx:
     image: nginx:alpine
     container_name: vehicle_erp_nginx
@@ -107,10 +108,8 @@ services:
     networks: [erp]
     ports:
       - "80:80"
-      - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./nginx/nginx-no-ssl.conf:/etc/nginx/conf.d/default.conf:ro
       - /var/www/certbot:/var/www/certbot:ro
     depends_on:
       api:
