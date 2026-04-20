@@ -71,6 +71,7 @@ const createInvoiceSchema = z.object({
   items: z.array(itemSchema).min(1, 'At least one item required'),
   discount: z.number().int().min(0).optional().default(0),
   invoice_date: z.string().optional(),
+  payment_type: z.enum(['Cash', 'UPI', 'NEFT', 'RTGS', 'Cheque', 'Credit', 'Card', 'Other']).optional().default('Cash'),
   status: z.enum(['draft', 'confirmed']).optional().default('draft'),
   notes: z.string().max(2000).optional(),
   loan: invoiceLoanBodySchema.optional(),
@@ -80,6 +81,19 @@ const createInvoiceSchema = z.object({
 ).refine(
   (d) => !d.loan || d.status === 'confirmed',
   { message: 'Loan can only be added when confirming the sale, not for drafts', path: ['loan'] },
+);
+
+const updateInvoiceSchema = z.object({
+  customer_id: z.string().uuid().optional(),
+  customer: customerSchema.optional(),
+  items: z.array(itemSchema).min(1, 'At least one item required'),
+  discount: z.number().int().min(0).optional().default(0),
+  invoice_date: z.string().optional(),
+  payment_type: z.enum(['Cash', 'UPI', 'NEFT', 'RTGS', 'Cheque', 'Credit', 'Card', 'Other']).optional().default('Cash'),
+  notes: z.string().max(2000).optional(),
+}).refine(
+  (d) => d.customer_id || d.customer,
+  { message: 'Either customer_id or customer details required' },
 );
 
 // Static paths must be before /:id
@@ -126,6 +140,7 @@ router.get('/einvoice/status', (_req, res) => {
 
 router.post('/', requireNotRole('ca'), validateBody(createInvoiceSchema), ic.createInvoice);
 router.get('/', ic.listInvoices);
+router.patch('/:id', requireNotRole('ca'), requireMinRole('branch_manager'), validateBody(updateInvoiceSchema), ic.updateInvoice);
 
 router.get('/:id/preview', async (req, res) => {
   try {

@@ -15,7 +15,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Plus, Loader2, Search, FileText, Download, X, ChevronLeft, ChevronRight,
-  Check, ArrowRight, ArrowLeft, Trash2, Ban, ShieldCheck, ShieldX, Upload, Eye,
+  Check, ArrowRight, ArrowLeft, Trash2, Ban, ShieldCheck, ShieldX, Upload, Eye, Pencil,
   Landmark,
 } from 'lucide-react';
 import BulkImport from '@/components/BulkImport';
@@ -59,7 +59,15 @@ function useCustomerSearch(search) {
 // ─── New Sale Multi-Step Dialog ──────────────────────────────
 
 const EMPTY_CUSTOMER = { name: '', phone: '', email: '', address: '', gstin: '' };
-const EMPTY_LINE = { description: '', hsn_code: '8708', quantity: 1, unit_price_display: '', gst_rate: 28 };
+const EMPTY_LINE = {
+  description: '',
+  hsn_code: '8703',
+  quantity: 1,
+  unit_price_display: '',
+  gst_rate: 5,
+  price_includes_tax: true,
+};
+const PAYMENT_TYPES = ['Cash', 'UPI', 'NEFT', 'RTGS', 'Cheque', 'Credit', 'Card', 'Other'];
 
 function emptyLoanForm() {
   return {
@@ -92,6 +100,8 @@ function NewSaleDialog({ open, onOpenChange }) {
   const [vehicleSearch, setVehicleSearch] = useState('');
   const [lineItems, setLineItems] = useState([]);
   const [discount, setDiscount] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentType, setPaymentType] = useState('Cash');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
   const [addLoan, setAddLoan] = useState(false);
@@ -107,6 +117,7 @@ function NewSaleDialog({ open, onOpenChange }) {
       setSelectedCustomer(null); setNewCustomer(EMPTY_CUSTOMER);
       setSelectedVehicle(null); setVehicleSearch('');
       setLineItems([]); setDiscount(''); setNotes(''); setError('');
+      setInvoiceDate(new Date().toISOString().split('T')[0]); setPaymentType('Cash');
       setAddLoan(false); setLoanForm(emptyLoanForm());
     }
   }, [open]);
@@ -119,7 +130,8 @@ function NewSaleDialog({ open, onOpenChange }) {
         hsn_code: '8703',
         quantity: 1,
         unit_price_display: (selectedVehicle.selling_price / 100).toString(),
-        gst_rate: 28,
+        gst_rate: 5,
+        price_includes_tax: true,
       }]);
     }
   }, [selectedVehicle]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -160,13 +172,21 @@ function NewSaleDialog({ open, onOpenChange }) {
 
   const handleSubmit = (status) => {
     setError('');
-    const items = lineItems.filter((l) => l.description && l.unit_price_display).map((l) => ({
-      description: l.description,
-      hsn_code: l.hsn_code || '8703',
-      quantity: l.quantity || 1,
-      unit_price: Math.round(Number(l.unit_price_display) * 100),
-      gst_rate: Number(l.gst_rate) || 28,
-    }));
+    const items = lineItems.filter((l) => l.description && l.unit_price_display).map((l) => {
+      const gstRate = Number(l.gst_rate) || 0;
+      const enteredRupees = Number(l.unit_price_display) || 0;
+      const enteredPaise = Math.round(enteredRupees * 100);
+      const unitPriceExclusivePaise = l.price_includes_tax
+        ? Math.round(enteredPaise / (1 + (gstRate / 100)))
+        : enteredPaise;
+      return {
+        description: l.description,
+        hsn_code: l.hsn_code || '8703',
+        quantity: l.quantity || 1,
+        unit_price: unitPriceExclusivePaise,
+        gst_rate: gstRate,
+      };
+    });
 
     if (items.length === 0) {
       setError('Add at least one line item');
@@ -218,6 +238,8 @@ function NewSaleDialog({ open, onOpenChange }) {
     const payload = {
       items,
       discount: discount ? Math.round(Number(discount) * 100) : 0,
+      invoice_date: invoiceDate || undefined,
+      payment_type: paymentType || 'Cash',
       status,
       notes: notes || undefined,
       vehicle_id: selectedVehicle?.id,
@@ -236,14 +258,19 @@ function NewSaleDialog({ open, onOpenChange }) {
 
   // Calculate totals for preview
   const subtotal = lineItems.reduce((s, l) => {
-    const price = Number(l.unit_price_display) || 0;
-    return s + price * (l.quantity || 1);
+    const entered = Number(l.unit_price_display) || 0;
+    const qty = l.quantity || 1;
+    const gstRate = Number(l.gst_rate) || 0;
+    const baseUnit = l.price_includes_tax ? (entered / (1 + (gstRate / 100))) : entered;
+    return s + (baseUnit * qty);
   }, 0);
   const discountAmt = Number(discount) || 0;
   const gstTotal = lineItems.reduce((s, l) => {
-    const price = Number(l.unit_price_display) || 0;
+    const entered = Number(l.unit_price_display) || 0;
+    const qty = l.quantity || 1;
     const gstRate = Number(l.gst_rate) || 0;
-    return s + (price * (l.quantity || 1) * gstRate) / 100;
+    const baseUnit = l.price_includes_tax ? (entered / (1 + (gstRate / 100))) : entered;
+    return s + (baseUnit * qty * gstRate) / 100;
   }, 0);
   const grandTotal = subtotal - discountAmt + gstTotal;
 
@@ -354,7 +381,7 @@ function NewSaleDialog({ open, onOpenChange }) {
           <div className="space-y-3">
             {lineItems.map((item, idx) => (
               <div key={idx} className="grid grid-cols-12 gap-2 items-end">
-                <div className="col-span-4 space-y-1">
+                <div className="col-span-3 space-y-1">
                   <Label className="text-xs">Description</Label>
                   <Input value={item.description} onChange={(e) => setField(idx, 'description', e.target.value)} placeholder="Vehicle / Insurance / RTO" />
                 </div>
@@ -367,7 +394,7 @@ function NewSaleDialog({ open, onOpenChange }) {
                   <Input type="number" min="1" value={item.quantity} onChange={(e) => setField(idx, 'quantity', Number(e.target.value))} />
                 </div>
                 <div className="col-span-2 space-y-1">
-                  <Label className="text-xs">Price (₹)</Label>
+                  <Label className="text-xs">Unit Price (₹)</Label>
                   <Input type="number" step="0.01" min="0" value={item.unit_price_display} onChange={(e) => setField(idx, 'unit_price_display', e.target.value)} />
                 </div>
                 <div className="col-span-2 space-y-1">
@@ -379,6 +406,16 @@ function NewSaleDialog({ open, onOpenChange }) {
                     <option value={5}>5%</option>
                     <option value={0}>0%</option>
                   </Select>
+                </div>
+                <div className="col-span-1 flex items-center justify-center">
+                  <label className="flex flex-col items-center gap-1 text-[10px] text-muted-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!item.price_includes_tax}
+                      onChange={(e) => setField(idx, 'price_includes_tax', e.target.checked)}
+                    />
+                    Incl GST
+                  </label>
                 </div>
                 <div className="col-span-1">
                   <Button variant="ghost" size="icon" onClick={() => removeLine(idx)}>
@@ -392,6 +429,16 @@ function NewSaleDialog({ open, onOpenChange }) {
             </Button>
 
             <div className="grid grid-cols-2 gap-3 pt-2">
+              <div className="space-y-1">
+                <Label>Invoice date</Label>
+                <Input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>Payment type</Label>
+                <Select value={paymentType} onChange={(e) => setPaymentType(e.target.value)}>
+                  {PAYMENT_TYPES.map((p) => <option key={p} value={p}>{p}</option>)}
+                </Select>
+              </div>
               <div className="space-y-1">
                 <Label>Discount (₹)</Label>
                 <Input type="number" step="0.01" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="0.00" />
@@ -412,6 +459,16 @@ function NewSaleDialog({ open, onOpenChange }) {
               <CardContent className="text-sm">
                 <p className="font-medium">{selectedCustomer?.name || newCustomer.name}</p>
                 <p className="text-muted-foreground">{selectedCustomer?.phone || newCustomer.phone}</p>
+                {(selectedCustomer?.gstin || newCustomer.gstin) ? (
+                  <p className="text-muted-foreground">GSTIN: {selectedCustomer?.gstin || newCustomer.gstin}</p>
+                ) : null}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Invoice details</CardTitle></CardHeader>
+              <CardContent className="text-sm space-y-1">
+                <p><strong>Date:</strong> {invoiceDate || '-'}</p>
+                <p><strong>Payment type:</strong> {paymentType}</p>
               </CardContent>
             </Card>
 
@@ -438,16 +495,19 @@ function NewSaleDialog({ open, onOpenChange }) {
                 </TableHeader>
                 <TableBody>
                   {lineItems.filter((l) => l.description).map((l, i) => {
-                    const price = Number(l.unit_price_display) || 0;
+                    const entered = Number(l.unit_price_display) || 0;
                     const qty = l.quantity || 1;
-                    const gstAmt = (price * qty * (Number(l.gst_rate) || 0)) / 100;
+                    const gstRate = Number(l.gst_rate) || 0;
+                    const taxableUnit = l.price_includes_tax ? (entered / (1 + (gstRate / 100))) : entered;
+                    const taxable = taxableUnit * qty;
+                    const gstAmt = (taxable * gstRate) / 100;
                     return (
                       <TableRow key={i}>
                         <TableCell>{l.description} {qty > 1 && `×${qty}`}</TableCell>
                         <TableCell>{l.hsn_code}</TableCell>
-                        <TableCell className="text-right">₹{(price * qty).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell className="text-right">₹{taxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell className="text-right">{l.gst_rate}% = ₹{gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
-                        <TableCell className="text-right font-medium">₹{(price * qty + gstAmt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell className="text-right font-medium">₹{(taxable + gstAmt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</TableCell>
                       </TableRow>
                     );
                   })}
@@ -794,6 +854,7 @@ export default function SalesPage() {
               <TableHead>Customer</TableHead>
               <TableHead>Vehicle</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Payment</TableHead>
               <TableHead>e-Invoice</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -802,13 +863,13 @@ export default function SalesPage() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-12">
+                <TableCell colSpan={9} className="text-center py-12">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                 </TableCell>
               </TableRow>
             ) : invoices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No invoices found</TableCell>
+                <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">No invoices found</TableCell>
               </TableRow>
             ) : (
               invoices.map((inv) => (
@@ -826,6 +887,9 @@ export default function SalesPage() {
                   </TableCell>
                   <TableCell>
                     <Badge variant={INV_STATUS_BADGE[inv.status]}>{inv.status}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{inv.payment_type || 'Cash'}</Badge>
                   </TableCell>
                   <TableCell>
                     {inv.irn_status === 'generated' && (
@@ -856,6 +920,18 @@ export default function SalesPage() {
                           onClick={() => setPreviewInvoice({ id: inv.id, invoice_number: inv.invoice_number })}
                         >
                           <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {canWrite && inv.status !== 'cancelled' && (
+                        <Button
+                          asChild
+                          variant="ghost"
+                          size="sm"
+                          title="Edit invoice"
+                        >
+                          <Link to={`/sales/${inv.id}/edit`}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Link>
                         </Button>
                       )}
                       {inv.status === 'confirmed' && (

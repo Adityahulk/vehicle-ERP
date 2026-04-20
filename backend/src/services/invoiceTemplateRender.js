@@ -11,7 +11,7 @@ const PRESET_LOGO_DIR = path.join(__dirname, '..', '..', 'assets', 'invoice-logo
 
 /** Same branding as frontend public/assets/mvg-logo.png (copied into backend for server-side PDF). */
 const LOGO_PRESET_FILES = {
-  mvg_group: 'mvg-group.png',
+  mvg_group: 'mvg-group-clean.png',
 };
 
 /** Built-in signature scans (Rudra Green Legender — Proprietor; Mavidya — Director). */
@@ -213,6 +213,7 @@ function buildHeaderHtml(inv, L, logoBlock) {
       <table class="meta-table" style="margin-left:auto">
         <tr><td><strong>Invoice No.</strong></td><td>${esc(inv.invoice_number)}</td></tr>
         <tr><td><strong>Invoice Date</strong></td><td>${formatDate(inv.invoice_date)}</td></tr>
+        <tr><td><strong>Payment Type</strong></td><td>${esc(inv.payment_type || (Number(inv.loan_amount) > 0 ? 'Credit' : 'Cash'))}</td></tr>
         <tr><td><strong>Due Date</strong></td><td>${formatDate(inv.loan_due_date || inv.invoice_date)}</td></tr>
         <tr><td><strong>Status</strong></td><td>${esc(String(inv.status || '').toUpperCase())}</td></tr>
       </table>
@@ -291,7 +292,7 @@ function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
     ? partyLines(invN.customer_name, invN.customer_address, invN.customer_phone, invN.customer_gstin)
     : '<p style="font-size:9px;">Same as billing / see delivery note</p>';
 
-  const payType = Number(invN.loan_amount) > 0 ? 'Credit' : 'Cash';
+  const payType = invN.payment_type || (Number(invN.loan_amount) > 0 ? 'Credit' : 'Cash');
   const ddm = formatDateDdMmYyyy(invN.invoice_date);
   const salesExecHtml = L.sales_executive_label ? esc(L.sales_executive_label) : '';
 
@@ -680,6 +681,7 @@ function buildDummyInvoiceData() {
     company_id: '00000000-0000-0000-0000-000000000000',
     invoice_number: 'MVG/25-26/102',
     invoice_date: new Date().toISOString().split('T')[0],
+    payment_type: 'Cash',
     status: 'confirmed',
     subtotal: 45193810,
     discount: 0,

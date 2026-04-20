@@ -41,6 +41,47 @@ async function generateInvoiceNumber(client, companyId, branchId) {
   return `INV-${year}-${branchCode}-${seq}`;
 }
 
+function computeInvoiceItems(items, interstate) {
+  let subtotal = 0;
+  let totalCgst = 0;
+  let totalSgst = 0;
+  let totalIgst = 0;
+  const processedItems = [];
+
+  for (const item of items) {
+    const unitPrice = item.unit_price;
+    const qty = item.quantity || 1;
+    const lineTotal = unitPrice * qty;
+    const hsnCode = item.hsn_code || '8703';
+    const gstRate = item.gst_rate !== undefined ? item.gst_rate : getGstRateForHsn(hsnCode);
+
+    const gst = calculateGst(lineTotal, gstRate, interstate);
+    const amount = lineTotal + gst.cgst_amount + gst.sgst_amount + gst.igst_amount;
+
+    processedItems.push({
+      description: item.description,
+      hsn_code: hsnCode,
+      quantity: qty,
+      unit_price: unitPrice,
+      ...gst,
+      amount,
+    });
+
+    subtotal += lineTotal;
+    totalCgst += gst.cgst_amount;
+    totalSgst += gst.sgst_amount;
+    totalIgst += gst.igst_amount;
+  }
+
+  return {
+    processedItems,
+    subtotal,
+    totalCgst,
+    totalSgst,
+    totalIgst,
+  };
+}
+
 /**
  * Insert invoice + line items inside an open transaction.
  * @param {import('pg').PoolClient} client
@@ -103,37 +144,13 @@ async function insertInvoiceWithItems(client, company_id, branch_id, data) {
 
   const invoiceNumber = await generateInvoiceNumber(client, company_id, branch_id);
 
-  let subtotal = 0;
-  let totalCgst = 0;
-  let totalSgst = 0;
-  let totalIgst = 0;
-  const processedItems = [];
-
-  for (const item of data.items) {
-    const unitPrice = item.unit_price;
-    const qty = item.quantity || 1;
-    const lineTotal = unitPrice * qty;
-    const hsnCode = item.hsn_code || '8703';
-    const gstRate = item.gst_rate !== undefined ? item.gst_rate : getGstRateForHsn(hsnCode);
-
-    const gst = calculateGst(lineTotal, gstRate, interstate);
-
-    const amount = lineTotal + gst.cgst_amount + gst.sgst_amount + gst.igst_amount;
-
-    processedItems.push({
-      description: item.description,
-      hsn_code: hsnCode,
-      quantity: qty,
-      unit_price: unitPrice,
-      ...gst,
-      amount,
-    });
-
-    subtotal += lineTotal;
-    totalCgst += gst.cgst_amount;
-    totalSgst += gst.sgst_amount;
-    totalIgst += gst.igst_amount;
-  }
+  const {
+    processedItems,
+    subtotal,
+    totalCgst,
+    totalSgst,
+    totalIgst,
+  } = computeInvoiceItems(data.items, interstate);
 
   const discount = data.discount || 0;
   const total = subtotal - discount + totalCgst + totalSgst + totalIgst;
@@ -141,14 +158,14 @@ async function insertInvoiceWithItems(client, company_id, branch_id, data) {
   const { rows: invRows } = await client.query(
     `INSERT INTO invoices
        (company_id, branch_id, invoice_number, invoice_date, customer_id, vehicle_id,
-        subtotal, discount, cgst_amount, sgst_amount, igst_amount, total, status, notes)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        subtotal, discount, cgst_amount, sgst_amount, igst_amount, total, status, notes, payment_type)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
      RETURNING *`,
     [
       company_id, branch_id, invoiceNumber, data.invoice_date || new Date().toISOString().split('T')[0],
       customerId, vehicleId,
       subtotal, discount, totalCgst, totalSgst, totalIgst, total,
-      data.status || 'draft', data.notes || null,
+      data.status || 'draft', data.notes || null, data.payment_type || 'Cash',
     ],
   );
 
@@ -304,6 +321,166 @@ async function getInvoice(req, res) {
   res.json(result);
 }
 
+async function updateInvoice(req, res) {
+  const { id } = req.params;
+  const company_id = req.user.company_id;
+  const denied = await invoiceBranchAccessError(req, id);
+  if (denied) return res.status(denied.status).json({ error: denied.error });
+
+  const data = req.validated;
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: invRows } = await client.query(
+      `SELECT id, status, customer_id, branch_id, vehicle_id
+       FROM invoices
+       WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE
+       FOR UPDATE`,
+      [id, company_id],
+    );
+    if (invRows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+    const current = invRows[0];
+    if (current.status === 'cancelled') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Cancelled invoices cannot be edited' });
+    }
+
+    let customerId = current.customer_id;
+    if (data.customer_id) {
+      const { rows: c } = await client.query(
+        `SELECT id FROM customers WHERE id = $1 AND company_id = $2 AND is_deleted = FALSE`,
+        [data.customer_id, company_id],
+      );
+      if (c.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Selected customer not found for this company' });
+      }
+      customerId = data.customer_id;
+    } else if (data.customer) {
+      const { rows: newCust } = await client.query(
+        `INSERT INTO customers (company_id, name, phone, email, address, gstin)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id`,
+        [
+          company_id,
+          data.customer.name,
+          data.customer.phone || null,
+          data.customer.email || null,
+          data.customer.address || null,
+          data.customer.gstin || null,
+        ],
+      );
+      customerId = newCust[0].id;
+    }
+
+    const { rows: custRows } = await client.query(
+      `SELECT gstin FROM customers WHERE id = $1 AND company_id = $2`,
+      [customerId, company_id],
+    );
+    const customerGstin = custRows[0]?.gstin;
+
+    const { rows: compRows } = await client.query(
+      `SELECT gstin FROM companies WHERE id = $1`,
+      [company_id],
+    );
+    const companyGstin = compRows[0]?.gstin;
+
+    const interstate = isInterstate(companyGstin, customerGstin);
+    const {
+      processedItems,
+      subtotal,
+      totalCgst,
+      totalSgst,
+      totalIgst,
+    } = computeInvoiceItems(data.items, interstate);
+
+    const discount = data.discount || 0;
+    const total = subtotal - discount + totalCgst + totalSgst + totalIgst;
+
+    await client.query(
+      `UPDATE invoices
+       SET invoice_date = $1,
+           customer_id = $2,
+           subtotal = $3,
+           discount = $4,
+           cgst_amount = $5,
+           sgst_amount = $6,
+           igst_amount = $7,
+           total = $8,
+           notes = $9,
+           payment_type = $10,
+           updated_at = NOW()
+       WHERE id = $11 AND company_id = $12`,
+      [
+        data.invoice_date || new Date().toISOString().split('T')[0],
+        customerId,
+        subtotal,
+        discount,
+        totalCgst,
+        totalSgst,
+        totalIgst,
+        total,
+        data.notes || null,
+        data.payment_type || 'Cash',
+        id,
+        company_id,
+      ],
+    );
+
+    await client.query(
+      `UPDATE invoice_items
+       SET is_deleted = TRUE, updated_at = NOW()
+       WHERE invoice_id = $1 AND company_id = $2 AND is_deleted = FALSE`,
+      [id, company_id],
+    );
+
+    for (const item of processedItems) {
+      await client.query(
+        `INSERT INTO invoice_items
+           (invoice_id, company_id, description, hsn_code, quantity, unit_price,
+            cgst_rate, sgst_rate, igst_rate, cgst_amount, sgst_amount, igst_amount, amount)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [
+          id,
+          company_id,
+          item.description,
+          item.hsn_code,
+          item.quantity,
+          item.unit_price,
+          item.cgst_rate,
+          item.sgst_rate,
+          item.igst_rate,
+          item.cgst_amount,
+          item.sgst_amount,
+          item.igst_amount,
+          item.amount,
+        ],
+      );
+    }
+
+    await client.query('COMMIT');
+    const result = await fetchFullInvoice(id, company_id);
+    logAudit({
+      companyId: company_id,
+      userId: req.user.id,
+      action: 'update',
+      entity: 'invoice',
+      entityId: id,
+      req,
+    });
+    res.json(result);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 async function cancelInvoice(req, res) {
   const { id } = req.params;
   const company_id = req.user.company_id;
@@ -457,6 +634,7 @@ async function fetchFullInvoice(invoiceId, companyId) {
 
 module.exports = {
   createInvoice,
+  updateInvoice,
   insertInvoiceWithItems,
   listInvoices,
   getInvoice,

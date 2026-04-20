@@ -8,6 +8,7 @@ import DashboardPage from './pages/DashboardPage';
 import BranchDashboard from './pages/BranchDashboard';
 import InventoryPage from './pages/InventoryPage';
 import SalesPage from './pages/SalesPage';
+import InvoiceEditPage from './pages/InvoiceEditPage';
 import LoansPage from './pages/LoansPage';
 import ExpensesPage from './pages/ExpensesPage';
 import SettingsPage from './pages/SettingsPage';
@@ -82,6 +83,9 @@ export default function App() {
 
             <Route element={<ProtectedRoute allowedRoles={['super_admin', 'company_admin', 'branch_manager', 'ca']} />}>
               <Route path="/sales" element={<SalesPage />} />
+            </Route>
+            <Route element={<ProtectedRoute allowedRoles={['super_admin', 'company_admin', 'branch_manager']} />}>
+              <Route path="/sales/:id/edit" element={<InvoiceEditPage />} />
             </Route>
 
             <Route element={<ProtectedRoute allowedRoles={['super_admin', 'company_admin', 'branch_manager', 'ca']} />}>
