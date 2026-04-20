@@ -51,6 +51,17 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
+/** IRN QR for PDF/HTML: prefer `irn_qr_data_uri` from attachIrnQrDataUri; else signed_qr via fallback URL. */
+function irnQrImgHtml(inv, opts = {}) {
+  if (!inv?.irn) return '';
+  const payload = inv.signed_qr != null ? String(inv.signed_qr).trim() : '';
+  if (!inv.irn_qr_data_uri && !payload) return '';
+  const src = inv.irn_qr_data_uri
+    || `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(payload)}`;
+  const br = opts.leadingBreak === false ? '' : '<br/>';
+  return `${br}<img src="${src}" style="width:90px;height:90px;margin-top:6px" alt="" />`;
+}
+
 function formatPaise(paise) {
   return (Number(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -415,7 +426,7 @@ function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
     ? `<div class="einv-box">
         <strong>E-INVOICE (IRN)</strong><br/>
         <span style="font-family:monospace;word-break:break-all;font-size:9px;">${esc(inv.irn)}</span>
-        ${inv.signed_qr && L.show_qr_code ? `<br/><img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(inv.signed_qr)}" style="width:90px;height:90px;margin-top:6px" alt="" />` : ''}
+        ${irnQrImgHtml(inv)}
        </div>`
     : '';
 
@@ -601,7 +612,7 @@ function buildStandardInvoiceHtml({ invoice: inv, items }, templateRow) {
     ? `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:10px 14px;margin-bottom:12px;">
         <p style="font-size:9px;color:#16a34a;font-weight:600;">E-INVOICE (IRN)</p>
         <p style="font-size:10px;font-family:monospace;word-break:break-all;">${esc(inv.irn)}</p>
-        ${inv.signed_qr && L.show_qr_code ? `<img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(inv.signed_qr)}" style="width:90px;height:90px;margin-top:6px" />` : ''}
+        ${irnQrImgHtml(inv, { leadingBreak: false })}
        </div>`
     : '';
 

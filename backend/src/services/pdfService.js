@@ -136,7 +136,7 @@ function buildInvoiceHtml({ invoice, items }) {
       </div>
       ${inv.signed_qr ? `
       <div style="margin-left:12px;flex-shrink:0;">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(inv.signed_qr)}" style="width:90px;height:90px;" />
+        <img src="${inv.irn_qr_data_uri || `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(inv.signed_qr)}`}" style="width:90px;height:90px;" alt="" />
       </div>` : ''}
     </div>
   </div>` : ''}
@@ -175,7 +175,7 @@ const {
   fetchInvoiceTemplateRow,
   buildStandardInvoiceHtml,
 } = require('./invoiceTemplateRender');
-const { generateBarcodeBuffer } = require('./barcodeService');
+const { generateBarcodeBuffer, generateIrnSignedQrBuffer } = require('./barcodeService');
 
 /** Embeds Code128 of invoice_number for print/PDF (data URI). */
 async function attachInvoiceBarcodeDataUri(invoiceData) {
@@ -191,6 +191,24 @@ async function attachInvoiceBarcodeDataUri(invoiceData) {
     };
   } catch (e) {
     console.error('attachInvoiceBarcodeDataUri:', e.message);
+    return invoiceData;
+  }
+}
+
+/** Embeds IRN SignedQRCode as PNG data URI so PDFs render offline (no external QR API). */
+async function attachIrnQrDataUri(invoiceData) {
+  const inv = invoiceData?.invoice;
+  const payload = inv?.signed_qr != null ? String(inv.signed_qr).trim() : '';
+  if (!inv?.irn || !payload) return invoiceData;
+  try {
+    const buf = await generateIrnSignedQrBuffer(payload);
+    const irn_qr_data_uri = `data:image/png;base64,${buf.toString('base64')}`;
+    return {
+      ...invoiceData,
+      invoice: { ...inv, irn_qr_data_uri },
+    };
+  } catch (e) {
+    console.error('attachIrnQrDataUri:', e.message);
     return invoiceData;
   }
 }
@@ -241,14 +259,16 @@ async function htmlToPdfBuffer(html) {
 async function generateInvoicePdf(invoiceData, companyId, templateId) {
   const row = await fetchInvoiceTemplateRow(companyId, templateId || undefined);
   const withBarcode = await attachInvoiceBarcodeDataUri(invoiceData);
-  const html = buildStandardInvoiceHtml(withBarcode, row);
+  const withIrnQr = await attachIrnQrDataUri(withBarcode);
+  const html = buildStandardInvoiceHtml(withIrnQr, row);
   return htmlToPdfBuffer(html);
 }
 
 async function generateInvoiceHtmlForPreview(invoiceData, companyId, templateId) {
   const row = await fetchInvoiceTemplateRow(companyId, templateId || undefined);
   const withBarcode = await attachInvoiceBarcodeDataUri(invoiceData);
-  return buildStandardInvoiceHtml(withBarcode, row);
+  const withIrnQr = await attachIrnQrDataUri(withBarcode);
+  return buildStandardInvoiceHtml(withIrnQr, row);
 }
 
 function buildPurchaseOrderHtml({ purchase_order: po, items }) {
@@ -397,6 +417,7 @@ module.exports = {
   generateInvoicePdf,
   generateInvoiceHtmlForPreview,
   attachInvoiceBarcodeDataUri,
+  attachIrnQrDataUri,
   htmlToPdfBuffer,
   buildInvoiceHtml,
   generatePurchaseOrderPdf,

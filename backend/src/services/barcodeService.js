@@ -44,6 +44,31 @@ async function generateQRCodeBuffer(chassisNumber, make, model) {
   });
 }
 
+/**
+ * QR for e-invoice print/PDF — encodes NIC IRP SignedQRCode (long JWS string).
+ * Uses low error correction for maximum payload capacity.
+ */
+async function generateIrnSignedQrBuffer(signedQrPayload) {
+  const s = String(signedQrPayload ?? '').trim();
+  if (!s) {
+    return Promise.reject(new Error('Signed QR payload is required'));
+  }
+  return new Promise((resolve, reject) => {
+    bwipjs.toBuffer(
+      {
+        bcid: 'qrcode',
+        text: s,
+        scale: 4,
+        eclevel: 'L',
+      },
+      (err, png) => {
+        if (err) return reject(err);
+        resolve(png);
+      },
+    );
+  });
+}
+
 function generateVehicleLabelHTML(vehicle, company, branch) {
   const compName = company?.name || 'Dealership';
   const branchName = branch?.name || '';
@@ -222,6 +247,7 @@ function generateBatchLabelsHTML(labelsHTML) {
 module.exports = {
   generateBarcodeBuffer,
   generateQRCodeBuffer,
+  generateIrnSignedQrBuffer,
   generateVehicleLabelHTML,
   generateBatchLabelsHTML
 };
