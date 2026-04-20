@@ -45,7 +45,7 @@ function mergeLayout(row) {
   return { ...DEFAULT_LAYOUT, ...lc };
 }
 
-function TemplateThumbnail({ templateId }) {
+function TemplateThumbnail({ templateId, refreshKey }) {
   const [src, setSrc] = useState('');
   const blobRef = useRef(null);
 
@@ -59,7 +59,8 @@ function TemplateThumbnail({ templateId }) {
     (async () => {
       try {
         const token = localStorage.getItem('access_token');
-        const url = `${apiPath('/invoices/preview-template')}?templateId=${encodeURIComponent(templateId)}`;
+        const bust = encodeURIComponent(String(refreshKey ?? ''));
+        const url = `${apiPath('/invoices/preview-template')}?templateId=${encodeURIComponent(templateId)}&_rev=${bust}`;
         const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
         const html = await res.text();
         const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
@@ -82,7 +83,7 @@ function TemplateThumbnail({ templateId }) {
       }
       setSrc('');
     };
-  }, [templateId]);
+  }, [templateId, refreshKey]);
 
   if (!src) {
     return (
@@ -122,7 +123,7 @@ export default function InvoiceTemplates() {
     queryFn: () => api.get('/invoice-templates').then((r) => r.data.templates),
   });
 
-  const { data: company } = useQuery({
+  const { data: company, dataUpdatedAt: companyQueryTs } = useQuery({
     queryKey: ['company', user?.company_id],
     queryFn: () => api.get(`/companies/${user.company_id}`).then((r) => r.data.company),
     enabled: !!user?.company_id,
@@ -251,7 +252,10 @@ export default function InvoiceTemplates() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="overflow-hidden rounded-md border bg-muted/20">
-                <TemplateThumbnail templateId={t.id} />
+                <TemplateThumbnail
+                  templateId={t.id}
+                  refreshKey={`${t.updated_at || ''}|${companyQueryTs || 0}`}
+                />
               </div>
               <div className="flex flex-wrap gap-2">
                 {!t.is_default && (
@@ -304,7 +308,11 @@ export default function InvoiceTemplates() {
                   <div className="space-y-2">
                     <Label>Logo</Label>
                     {company?.logo_url && (
-                      <img src={company.logo_url} alt="Logo" className="h-14 object-contain border rounded p-1 bg-white" />
+                      <img
+                        src={`${company.logo_url}${company.logo_url.includes('?') ? '&' : '?'}v=${companyQueryTs || 0}`}
+                        alt="Logo"
+                        className="h-14 object-contain border rounded p-1 bg-white"
+                      />
                     )}
                     <Input type="file" accept=".png,.jpg,.jpeg,.svg" onChange={onLogoPick} disabled={logoMut.isPending} />
                     <p className="text-xs text-muted-foreground">PNG, JPG, or SVG — max 2MB</p>
@@ -322,7 +330,11 @@ export default function InvoiceTemplates() {
                   <div className="space-y-2">
                     <Label>Signature</Label>
                     {company?.signature_url && (
-                      <img src={company.signature_url} alt="Signature" className="h-14 object-contain border rounded p-1 bg-white" />
+                      <img
+                        src={`${company.signature_url}${company.signature_url.includes('?') ? '&' : '?'}v=${companyQueryTs || 0}`}
+                        alt="Signature"
+                        className="h-14 object-contain border rounded p-1 bg-white"
+                      />
                     )}
                     <Input type="file" accept=".png,.jpg,.jpeg" onChange={onSigPick} disabled={sigMut.isPending} />
                     <p className="text-xs text-muted-foreground">PNG or JPG — max 1MB (transparent PNG recommended)</p>

@@ -111,8 +111,10 @@ function tryLegacyUploadUrl(url) {
 
 function resolveLogoDataUri(companyId, invoice, layout) {
   if (!layout.show_logo) return '';
-  const asset = layout.logo_asset || 'company_upload';
-  if (asset !== 'company_upload' && LOGO_PRESET_FILES[asset]) {
+  const raw = layout.logo_asset;
+  const asset = typeof raw === 'string' ? raw.trim() : '';
+  const useCompanyUpload = !asset || asset.toLowerCase() === 'company_upload';
+  if (!useCompanyUpload && LOGO_PRESET_FILES[asset]) {
     const presetPath = path.join(PRESET_LOGO_DIR, LOGO_PRESET_FILES[asset]);
     if (fs.existsSync(presetPath)) return fileToDataUri(presetPath);
   }
@@ -122,8 +124,10 @@ function resolveLogoDataUri(companyId, invoice, layout) {
 
 function resolveSignatureDataUri(companyId, invoice, layout) {
   if (!layout.show_signature) return '';
-  const asset = layout.signature_asset || 'company_upload';
-  if (asset !== 'company_upload' && SIGNATURE_PRESET_FILES[asset]) {
+  const raw = layout.signature_asset;
+  const asset = typeof raw === 'string' ? raw.trim() : '';
+  const useCompanyUpload = !asset || asset.toLowerCase() === 'company_upload';
+  if (!useCompanyUpload && SIGNATURE_PRESET_FILES[asset]) {
     const presetPath = path.join(PRESET_SIGN_DIR, SIGNATURE_PRESET_FILES[asset]);
     if (fs.existsSync(presetPath)) return fileToDataUri(presetPath);
   }
