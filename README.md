@@ -195,10 +195,11 @@ JWT_ACCESS_EXPIRY=15m
 JWT_REFRESH_EXPIRY=7d
 CORS_ORIGIN=https://erp.yourdomain.com
 
-# Optional — Masters India e-invoice / e-way (see Environment Variables Reference)
-# MASTERS_INDIA_ENV=production
-# MASTERS_INDIA_API_KEY=...
-# Or: MASTERS_INDIA_USERNAME=... and MASTERS_INDIA_PASSWORD=...
+# Optional — TaxPro e-invoice / e-way (see Environment Variables Reference)
+# TAXPRO_ENV=production
+# TAXPRO_ASPID=... TAXPRO_PASSWORD=...
+# TAXPRO_EINV_USER_NAME=... TAXPRO_EINV_PASSWORD=...
+# TAXPRO_EWB_USER_NAME=... TAXPRO_EWB_PASSWORD=...
 ```
 
 Generate a secure JWT secret:
@@ -276,26 +277,28 @@ cd /home/deploy/vehicle-erp
 | `PUBLIC_APP_URL` | No | `CORS_ORIGIN` | Base URL embedded in invoice/quotation share links for WhatsApp |
 | `SHARE_SECRET` | No | `JWT_SECRET` | Secret for signing share-link JWTs |
 | `TWO_FACTOR_API_KEY` | No | — | 2Factor.in API key for SMS |
-| `MASTERS_INDIA_ENV` | No | `sandbox` | `sandbox` or `production` (API host for e-invoice / e-way) |
-| `MASTERS_INDIA_API_KEY` | No* | — | Profile API key (`api_key` header). Opaque keys are not JWTs — pair with username/password so the app can obtain `Authorization: JWT`. *Required if not using username/password |
-| `MASTERS_INDIA_API_AUTH_MODE` | No | `authorization_jwt` | Only applies to JWT-shaped keys: `authorization_jwt`, `both`, or `api_key_only` |
-| `MASTERS_INDIA_OPAQUE_AUTH` | No | `api_key_only` | API-key **only** (no username/password), per [API key docs](https://docs.mastersindia.co/einvoicing/authentication/api-key): `api_key` header. Alternatives if the gateway errors: `bearer_and_api_key`, `bearer_only`, `token_only`, `raw_authorization` |
-| `MASTERS_INDIA_USERNAME` | No* | — | Portal username for `POST /api/v1/token-auth/`. *With opaque API key, both are required for IRN |
-| `MASTERS_INDIA_PASSWORD` | No* | — | Portal password (pair with `MASTERS_INDIA_USERNAME`) |
+| `TAXPRO_ENV` | No | `sandbox` | `sandbox` or `production` (default API host for e-invoice / e-way) |
+| `TAXPRO_API_HOST` | No | — | Override base URL (defaults: sandbox `https://gstsandbox.charteredinfo.com`, production `https://einvapi.charteredinfo.com`) |
+| `TAXPRO_ASPID` | No* | — | ASP ID from TaxPro. *Required for IRN / e-way |
+| `TAXPRO_PASSWORD` | No* | — | ASP password. *Required for IRN / e-way |
+| `TAXPRO_EINV_USER_NAME` | No* | — | E-invoice portal user (`User_name` on auth). Alias: set `TAXPRO_USER_NAME` for both einv and ewb |
+| `TAXPRO_EINV_PASSWORD` | No* | — | E-invoice password (`eInvPwd`) |
+| `TAXPRO_EWB_USER_NAME` | No* | — | E-way portal user (`username` on auth) |
+| `TAXPRO_EWB_PASSWORD` | No* | — | E-way password (`ewbpwd`) |
+| `TAXPRO_QR_CODE_SIZE` | No | `250` | IRN QR size query parameter |
 
-### E-Invoice & E-Way Bill (Masters India)
+### E-Invoice & E-Way Bill (TaxPro GSP)
 
-Optional. When **either** an API key **or** username + password is set, branch managers can generate an **IRN** (e-invoice) and **e-way bill** for **confirmed** sales invoices. The seller **GSTIN** and company details come from the **company** profile (`companies.gstin`, name, address), not from these env vars.
+Optional. When **TaxPro ASP credentials and e-invoice user/password** are set, branch managers can generate an **IRN** for **confirmed** sales invoices. **E-way bill** also requires **e-way user/password** (`TAXPRO_EWB_*`). Seller **GSTIN** and party details come from the **company** and **customer** records, not from env vars.
 
-| Environment | API base (used by the backend) |
-|-------------|--------------------------------|
-| Sandbox (`MASTERS_INDIA_ENV=sandbox`) | `https://sandb-api.mastersindia.co` |
-| Production (`MASTERS_INDIA_ENV=production`) | `https://router.mastersindia.co` |
+| Environment | Default API base (override with `TAXPRO_API_HOST`) |
+|-------------|--------------------------------------------------|
+| Sandbox (`TAXPRO_ENV=sandbox`) | `https://gstsandbox.charteredinfo.com` |
+| Production (`TAXPRO_ENV=production`) | `https://einvapi.charteredinfo.com` |
 
-- Full API reference: [Masters India e-Invoicing](https://docs.mastersindia.co/einvoicing)
-- Auth: [API key](https://docs.mastersindia.co/einvoicing/authentication/api-key) uses header **`api_key`** with the UI-generated value (default in this app). [Access token](https://docs.mastersindia.co/einvoicing/authentication/access-tokens) uses **`Authorization: JWT …`** after `token-auth`. If you use **API key only** and still see *access token was not found*, set **`MASTERS_INDIA_OPAQUE_AUTH=bearer_and_api_key`** or ask Masters support which header their environment expects.
+- TaxPro overview: [TaxPro GSP API](https://gsthelp.charteredinfo.com/ucl/taxpro_gsp_api.htm)
 
-The app exposes **`GET /api/invoices/einvoice/status`** (authenticated) returning `{ enabled, environment }` so the UI can show whether integration is configured.
+The app exposes **`GET /api/invoices/einvoice/status`** (authenticated) returning `{ enabled, ewayConfigured, environment }` so the UI can tell whether e-invoice and full e-way credentials are present.
 
 ---
 
@@ -314,7 +317,7 @@ vehicle-erp/
 │   │   ├── jobs/           # BullMQ job definitions
 │   │   ├── middleware/      # auth, role, validate
 │   │   ├── routes/         # Express routers
-│   │   ├── services/       # Business logic (GST, PDF, Masters India e-invoice, notifications)
+│   │   ├── services/       # Business logic (GST, PDF, TaxPro e-invoice / e-way, notifications)
 │   │   ├── index.js        # Express server entry point
 │   │   └── worker.js       # Standalone BullMQ worker entry point
 │   ├── uploads/            # File uploads (logos, signatures)

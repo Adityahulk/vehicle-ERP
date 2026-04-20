@@ -899,22 +899,21 @@ export default function SalesPage() {
                         </>
                       )}
                       {inv.status === 'confirmed' && (!inv.irn_status || inv.irn_status === 'pending' || inv.irn_status === 'failed') && canWrite && (
-                        <Button variant="ghost" size="sm" title="Generate e-Invoice (IRN)"
+                        <Button variant="ghost" size="sm" title={eInvoiceStatus?.enabled ? 'Generate e-Invoice (IRN)' : 'TaxPro e-invoice is not configured on the server'}
                           onClick={() => { if (window.confirm('Generate e-Invoice for this invoice?')) generateEInvoiceMutation.mutate(inv.id); }}
-                          disabled={generateEInvoiceMutation.isPending}>
+                          disabled={generateEInvoiceMutation.isPending || !eInvoiceStatus?.enabled}>
                           <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
                         </Button>
                       )}
                       {inv.irn_status === 'generated' && canWrite && (
                         <Button variant="ghost" size="sm" title="Cancel e-Invoice IRN"
                           onClick={() => { if (window.confirm('Cancel the e-Invoice IRN? This is only possible within 24 hours.')) cancelEInvoiceMutation.mutate(inv.id); }}
-                          disabled={cancelEInvoiceMutation.isPending}>
+                          disabled={cancelEInvoiceMutation.isPending || !eInvoiceStatus?.enabled}>
                           <ShieldX className="h-3.5 w-3.5 text-amber-600" />
                         </Button>
                       )}
-                      {/* E-WAY BILL BUTTON (CLEARTAX) */}
-                      {inv.irn_status === 'generated' && (!inv.eway_bill_status || inv.eway_bill_status !== 'generated') && canWrite && (
-                        <Button variant="ghost" size="sm" title="Generate E-Way Bill (ClearTax)"
+                      {inv.irn_status === 'generated' && (!inv.eway_bill_status || inv.eway_bill_status !== 'generated') && canWrite && eInvoiceStatus?.ewayConfigured && (
+                        <Button variant="ghost" size="sm" title="Generate E-Way Bill (TaxPro)"
                           onClick={() => { 
                             const distance = window.prompt("Enter Distance (km):", "100");
                             if (!distance) return;
@@ -930,7 +929,7 @@ export default function SalesPage() {
                               transport_mode: "1"
                             }).then(() => {
                               queryClient.invalidateQueries({ queryKey: ['invoices'] });
-                              toast.success('E-Way Bill Generated Successfully via ClearTax!');
+                              toast.success('E-Way bill generated.');
                             }).catch(err => toast.error(err.response?.data?.error || 'E-Way bill generation failed'));
                           }}>
                           <FileText className="h-3.5 w-3.5 text-blue-600" />

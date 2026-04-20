@@ -14,7 +14,7 @@ const {
   buildDummyInvoiceData,
   buildStandardInvoiceHtml,
 } = require('../services/invoiceTemplateRender');
-const mastersIndia = require('../services/mastersIndiaService');
+const taxPro = require('../services/taxProService');
 const { query } = require('../config/db');
 const { logAudit } = require('../middleware/auditLog');
 
@@ -115,11 +115,12 @@ router.get('/preview-template', requireMinRole('company_admin'), async (req, res
   }
 });
 
-// Masters India e-invoice status must be before /:id routes to avoid param collision
+// TaxPro e-invoice status must be before /:id routes to avoid param collision
 router.get('/einvoice/status', (_req, res) => {
   res.json({
-    enabled: mastersIndia.isMastersIndiaEnabled(),
-    environment: process.env.MASTERS_INDIA_ENV || 'sandbox',
+    enabled: taxPro.isTaxProEinvoiceEnabled(),
+    ewayConfigured: taxPro.isTaxProEnabled(),
+    environment: process.env.TAXPRO_ENV || 'sandbox',
   });
 });
 
@@ -175,7 +176,7 @@ router.get('/:id', ic.getInvoice);
 router.patch('/:id/cancel', requireNotRole('ca'), requireMinRole('branch_manager'), ic.cancelInvoice);
 router.patch('/:id/confirm', requireNotRole('ca'), ic.confirmInvoice);
 
-// ─── E-Invoice (Masters India) Routes ───────────────────────────
+// ─── E-Invoice (TaxPro) Routes ───────────────────────────
 
 router.post('/:id/einvoice/generate', requireNotRole('ca'), requireMinRole('branch_manager'), async (req, res) => {
   try {
@@ -184,10 +185,10 @@ router.post('/:id/einvoice/generate', requireNotRole('ca'), requireMinRole('bran
     const denied = await ic.invoiceBranchAccessError(req, invoiceId);
     if (denied) return res.status(denied.status).json({ success: false, error: denied.error });
 
-    if (!mastersIndia.isMastersIndiaEnabled()) {
+    if (!taxPro.isTaxProEinvoiceEnabled()) {
       return res.status(400).json({
         success: false,
-        error: 'Masters India is not configured. Set MASTERS_INDIA_API_KEY or MASTERS_INDIA_USERNAME and MASTERS_INDIA_PASSWORD.',
+        error: 'TaxPro e-invoice is not configured. Set TAXPRO_ASPID, TAXPRO_PASSWORD, TAXPRO_EINV_USER_NAME, and TAXPRO_EINV_PASSWORD (see .env.example).',
       });
     }
 
@@ -235,7 +236,7 @@ router.post('/:id/einvoice/generate', requireNotRole('ca'), requireMinRole('bran
       return res.status(400).json({ success: false, error: 'E-Invoice already generated', irn: invoice.irn });
     }
 
-    const result = await mastersIndia.generateIRN(company_id, { invoice, items: invoice.items });
+    const result = await taxPro.generateIRN(company_id, { invoice, items: invoice.items });
 
     await query(
       `UPDATE invoices SET irn = $1, ack_number = $2, ack_date = $3, irn_date = $3, signed_qr = $4, signed_invoice = $5, irn_status = 'generated'
@@ -291,7 +292,7 @@ router.post('/:id/einvoice/cancel', requireNotRole('ca'), requireMinRole('branch
       return res.status(400).json({ success: false, error: 'E-invoice can only be cancelled within 24 hours of generation' });
     }
 
-    const result = await mastersIndia.cancelIRN(company_id, inv[0].irn, reason, remark, inv[0].company_gstin);
+    const result = await taxPro.cancelIRN(company_id, inv[0].irn, reason, remark, inv[0].company_gstin);
 
     await query(
       `UPDATE invoices SET irn_status = 'cancelled', irn_cancel_date = $1, irn_cancel_reason = $2
@@ -326,7 +327,7 @@ router.get('/:id/einvoice', async (req, res) => {
   }
 });
 
-// ─── E-Way Bill (Masters India) Routes ───────────────────────────
+// ─── E-Way Bill (TaxPro) Routes ───────────────────────────
 
 router.post('/:id/ewaybill/generate', requireNotRole('ca'), requireMinRole('branch_manager'), async (req, res) => {
   try {
@@ -335,10 +336,10 @@ router.post('/:id/ewaybill/generate', requireNotRole('ca'), requireMinRole('bran
     const denied = await ic.invoiceBranchAccessError(req, invoiceId);
     if (denied) return res.status(denied.status).json({ success: false, error: denied.error });
 
-    if (!mastersIndia.isMastersIndiaEnabled()) {
+    if (!taxPro.isTaxProEnabled()) {
       return res.status(400).json({
         success: false,
-        error: 'Masters India is not configured. Set MASTERS_INDIA_API_KEY or MASTERS_INDIA_USERNAME and MASTERS_INDIA_PASSWORD.',
+        error: 'TaxPro e-way bill is not configured. Set TAXPRO_EWB_USER_NAME and TAXPRO_EWB_PASSWORD in addition to ASP credentials (see .env.example).',
       });
     }
 
@@ -348,9 +349,12 @@ router.post('/:id/ewaybill/generate', requireNotRole('ca'), requireMinRole('bran
     }
 
     const { rows: inv } = await query(
-      `SELECT i.id, i.irn, i.irn_status, i.eway_bill_no, co.gstin AS company_gstin
+      `SELECT i.id, i.irn, i.irn_status, i.eway_bill_no, co.gstin AS company_gstin,
+       co.name AS company_name, co.address AS company_address,
+       c.name AS customer_name, c.address AS customer_address, c.gstin AS customer_gstin
        FROM invoices i
        INNER JOIN companies co ON co.id = i.company_id AND co.is_deleted = FALSE
+       INNER JOIN customers c ON c.id = i.customer_id AND c.company_id = i.company_id AND c.is_deleted = FALSE
        WHERE i.id = $1 AND i.company_id = $2 AND i.is_deleted = FALSE`,
       [invoiceId, company_id],
     );
@@ -359,7 +363,19 @@ router.post('/:id/ewaybill/generate', requireNotRole('ca'), requireMinRole('bran
     if (!inv[0].irn || inv[0].irn_status !== 'generated') return res.status(400).json({ success: false, error: 'Generate IRN before E-way bill' });
     if (inv[0].eway_bill_no) return res.status(400).json({ success: false, error: 'E-Way bill already generated', ewbNo: inv[0].eway_bill_no });
 
-    const result = await mastersIndia.generateEwayBill(company_id, inv[0].irn, transportArgs, inv[0].company_gstin);
+    const result = await taxPro.generateEwayBill(
+      company_id,
+      inv[0].irn,
+      transportArgs,
+      inv[0].company_gstin,
+      {
+        companyName: inv[0].company_name,
+        companyAddress: inv[0].company_address,
+        customerName: inv[0].customer_name,
+        customerAddress: inv[0].customer_address,
+        customerGstin: inv[0].customer_gstin,
+      },
+    );
 
     await query(
       `UPDATE invoices SET eway_bill_no = $1, eway_bill_date = $2, eway_bill_valid_until = $3, eway_bill_status = 'generated',
@@ -398,7 +414,7 @@ router.post('/:id/ewaybill/cancel', requireNotRole('ca'), requireMinRole('branch
       return res.status(400).json({ success: false, error: 'No active E-Way bill to cancel' });
     }
 
-    const result = await mastersIndia.cancelEwayBill(
+    const result = await taxPro.cancelEwayBill(
       company_id,
       inv[0].eway_bill_no,
       reason,
