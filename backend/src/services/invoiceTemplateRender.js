@@ -258,25 +258,26 @@ function splitBankTwoColumns(raw) {
 }
 
 function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
+  const invN = inv;
   const L = mergeLayout(templateRow);
   const tplPath = path.join(TEMPLATE_DIR, 'template_trade.html');
   let html = fs.readFileSync(tplPath, 'utf8');
-  const companyId = inv.company_id;
-  const { logo, signature } = resolveLogoSignatureDataUri(companyId, inv, L);
+  const companyId = invN.company_id;
+  const { logo, signature } = resolveLogoSignatureDataUri(companyId, invN, L);
   const hasIgst = items.some((i) => Number(i.igst_amount) > 0);
   const barColor = L.primary_color && String(L.primary_color).trim() ? String(L.primary_color).trim() : '#000000';
   const logoBlock = logo
     ? `<img src="${logo}" alt=" " />`
     : '<span style="display:inline-block;min-height:56px">&#160;</span>';
 
-  const emailSuffix = L.show_company_email === true && inv.company_email
-    ? esc(` | Email: ${inv.company_email}`)
+  const emailSuffix = L.show_company_email === true && invN.company_email
+    ? esc(` | Email: ${invN.company_email}`)
     : '';
 
-  const coStateCode = inv.company_gstin ? String(inv.company_gstin).slice(0, 2) : '—';
-  const coStateName = stateNameFromGstin(inv.company_gstin);
-  const posStateCode = inv.customer_gstin ? String(inv.customer_gstin).slice(0, 2) : '—';
-  const posStateName = inv.customer_gstin ? stateNameFromGstin(inv.customer_gstin) : '—';
+  const coStateCode = invN.company_gstin ? String(invN.company_gstin).slice(0, 2) : '—';
+  const coStateName = stateNameFromGstin(invN.company_gstin);
+  const posStateCode = invN.customer_gstin ? String(invN.customer_gstin).slice(0, 2) : '—';
+  const posStateName = invN.customer_gstin ? stateNameFromGstin(invN.customer_gstin) : '—';
 
   const partyLines = (name, addr, phone, gstin) => `
     <p><strong>${esc(name)}</strong></p>
@@ -287,15 +288,15 @@ function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
     <p>${gstin ? esc(`GSTIN: ${gstin}`) : '&#160;'}</p>`;
 
   const shipInner = L.ship_to_same_as_billing !== false
-    ? partyLines(inv.customer_name, inv.customer_address, inv.customer_phone, inv.customer_gstin)
+    ? partyLines(invN.customer_name, invN.customer_address, invN.customer_phone, invN.customer_gstin)
     : '<p style="font-size:9px;">Same as billing / see delivery note</p>';
 
-  const payType = Number(inv.loan_amount) > 0 ? 'Credit' : 'Cash';
-  const ddm = formatDateDdMmYyyy(inv.invoice_date);
+  const payType = Number(invN.loan_amount) > 0 ? 'Credit' : 'Cash';
+  const ddm = formatDateDdMmYyyy(invN.invoice_date);
   const salesExecHtml = L.sales_executive_label ? esc(L.sales_executive_label) : '';
 
   const metaLeft = [
-    tradeMetaTr('Invoice No.', esc(inv.invoice_number)),
+    tradeMetaTr('Invoice No.', esc(invN.invoice_number)),
     tradeMetaTr('Bill Ref No.', ''),
     tradeMetaTr('Date', esc(ddm)),
     tradeMetaTr('Date', ''),
@@ -307,9 +308,9 @@ function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
     tradeMetaTr('Date', esc(ddm)),
   ].join('');
 
-  const vehicleNo = esc(inv.rto_number || inv.chassis_number || '—');
-  const dest = esc(inv.branch_name || inv.customer_address?.split(',').pop()?.trim() || '—');
-  const eway = esc(inv.eway_bill_no || '—');
+  const vehicleNo = esc(invN.rto_number || invN.chassis_number || '—');
+  const dest = esc(invN.branch_name || invN.customer_address?.split(',').pop()?.trim() || '—');
+  const eway = esc(invN.eway_bill_no || '—');
 
   const unitLabel = 'Pcs';
   const itemsHead = hasIgst
@@ -362,7 +363,7 @@ function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
     </tr>`;
   }).join('');
 
-  const taxableTotal = Number(inv.subtotal) - Number(inv.discount);
+  const taxableTotal = Number(invN.subtotal) - Number(invN.discount);
   const first = items[0] || {};
   const cgstR = hasIgst ? 0 : (Number(first.cgst_rate) || 0);
   const sgstR = hasIgst ? 0 : (Number(first.sgst_rate) || 0);
@@ -371,11 +372,11 @@ function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
   const taxSummaryRow = `<tr>
     <td class="r">&#8377;${formatPaise(taxableTotal)}</td>
     <td class="r">${cgstR ? `${cgstR}%` : '0'}</td>
-    <td class="r">&#8377;${formatPaise(inv.cgst_amount)}</td>
+    <td class="r">&#8377;${formatPaise(invN.cgst_amount)}</td>
     <td class="r">${sgstR ? `${sgstR}%` : '0'}</td>
-    <td class="r">&#8377;${formatPaise(inv.sgst_amount)}</td>
+    <td class="r">&#8377;${formatPaise(invN.sgst_amount)}</td>
     <td class="r">${igstR ? `${igstR}%` : '0'}</td>
-    <td class="r">&#8377;${formatPaise(inv.igst_amount)}</td>
+    <td class="r">&#8377;${formatPaise(invN.igst_amount)}</td>
   </tr>`;
 
   const qtySum = items.reduce((s, i) => s + Number(i.quantity || 0), 0);
@@ -393,17 +394,17 @@ function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
   const roundOff = 0;
   const totalsRight = `
     <div class="tot-stack">
-      <div class="r"><span>Total Amount</span><span>&#8377;${formatPaise(inv.subtotal)}</span></div>
-      <div class="r"><span>Discount Amount</span><span>&#8377;${formatPaise(inv.discount)}</span></div>
+      <div class="r"><span>Total Amount</span><span>&#8377;${formatPaise(invN.subtotal)}</span></div>
+      <div class="r"><span>Discount Amount</span><span>&#8377;${formatPaise(invN.discount)}</span></div>
       <div class="r"><span>Pre Tax</span><span>&#8377;${formatPaise(preTax)}</span></div>
       <div class="r"><span>Taxable Amount</span><span>&#8377;${formatPaise(taxableTotal)}</span></div>
       <div class="r"><span>IGST Rate</span><span>${igstR ? Number(igstR).toFixed(2) : '0.00'}</span></div>
-      <div class="r"><span>IGST Amt</span><span>&#8377;${formatPaise(inv.igst_amount)}</span></div>
+      <div class="r"><span>IGST Amt</span><span>&#8377;${formatPaise(invN.igst_amount)}</span></div>
       <div class="r"><span>Cess Amount</span><span>&#8377;${formatPaise(cess)}</span></div>
       <div class="r"><span>Post Tax</span><span>&#8377;${formatPaise(postTax)}</span></div>
       <div class="r"><span>TCS</span><span>&#8377;${formatPaise(tcs)}</span></div>
       <div class="r"><span>Round Off Amount</span><span>&#8377;${formatPaise(roundOff)}</span></div>
-      <div class="r"><span>Grand Total</span><span>&#8377; ${formatPaise(inv.total)}</span></div>
+      <div class="r"><span>Grand Total</span><span>&#8377; ${formatPaise(invN.total)}</span></div>
     </div>`;
 
   const termsBlock = L.show_terms && L.terms_text
@@ -422,22 +423,22 @@ function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
     ? `<img src="${signature}" alt=" " />`
     : '<div style="min-height:48px">&#160;</div>';
 
-  const einvoiceBlock = inv.irn
+  const einvoiceBlock = invN.irn
     ? `<div class="einv-box">
         <strong>E-INVOICE (IRN)</strong><br/>
-        <span style="font-family:monospace;word-break:break-all;font-size:9px;">${esc(inv.irn)}</span>
-        ${irnQrImgHtml(inv)}
+        <span style="font-family:monospace;word-break:break-all;font-size:9px;">${esc(invN.irn)}</span>
+        ${irnQrImgHtml(invN)}
        </div>`
     : '';
 
-  const qrBlock = !inv.irn && L.show_qr_code
+  const qrBlock = !invN.irn && L.show_qr_code
     ? '<div style="margin-top:8px;text-align:center;font-size:9px;border:1px solid #000;padding:8px;">QR</div>'
     : '';
 
-  const loanBlock = L.show_loan_summary && inv.loan_amount != null && Number(inv.loan_amount) > 0
+  const loanBlock = L.show_loan_summary && invN.loan_amount != null && Number(invN.loan_amount) > 0
     ? `<div class="loan-box"><strong>Loan summary</strong><br/>
-        Bank: ${esc(inv.loan_bank_name || '—')}<br/>
-        Amount: &#8377;${formatPaise(inv.loan_amount)} · EMI: &#8377;${formatPaise(inv.loan_emi_amount || 0)} · Tenure: ${esc(inv.loan_tenure_months || '—')} months
+        Bank: ${esc(invN.loan_bank_name || '—')}<br/>
+        Amount: &#8377;${formatPaise(invN.loan_amount)} · EMI: &#8377;${formatPaise(invN.loan_emi_amount || 0)} · Tenure: ${esc(invN.loan_tenure_months || '—')} months
        </div>`
     : '';
 
@@ -449,19 +450,19 @@ function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
     ? `<p class="page-foot" style="margin-top:4px;">${esc(L.footer_text)}</p>`
     : '';
 
-  const invoiceBarcodeRow = inv.invoice_barcode_data_uri
-    ? `<table class="inv" style="margin:0;border:1px solid #000;border-top:0;border-collapse:collapse;width:100%"><tr><td style="text-align:center;padding:6px 8px;vertical-align:middle"><img src="${inv.invoice_barcode_data_uri}" alt="" style="max-height:38px;max-width:92%;display:inline-block" /></td></tr></table>`
+  const invoiceBarcodeRow = invN.invoice_barcode_data_uri
+    ? `<table class="inv" style="margin:0;border:1px solid #000;border-top:0;border-collapse:collapse;width:100%"><tr><td style="text-align:center;padding:6px 8px;vertical-align:middle"><img src="${invN.invoice_barcode_data_uri}" alt="" style="max-height:38px;max-width:92%;display:inline-block" /></td></tr></table>`
     : '';
 
   const map = {
     PRIMARY_COLOR: esc(barColor),
     ORIGINAL_LABEL: esc(L.original_copy_label || 'ORIGINAL FOR RECIPIENT'),
     LOGO_BLOCK: logoBlock,
-    COMPANY_NAME: esc(inv.company_name),
-    COMPANY_ADDRESS: esc(inv.company_address || '').replace(/\n/g, '<br/>'),
-    COMPANY_PHONE: esc(inv.company_phone || '—'),
+    COMPANY_NAME: esc(invN.company_name),
+    COMPANY_ADDRESS: esc(invN.company_address || '').replace(/\n/g, '<br/>'),
+    COMPANY_PHONE: esc(invN.company_phone || '—'),
     COMPANY_EMAIL_SUFFIX: emailSuffix,
-    COMPANY_GSTIN: esc(inv.company_gstin || '—'),
+    COMPANY_GSTIN: esc(invN.company_gstin || '—'),
     COMPANY_STATE_CODE: esc(coStateCode),
     COMPANY_STATE_NAME: esc(coStateName),
     META_LEFT: metaLeft,
@@ -469,10 +470,10 @@ function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
     EWAY: eway,
     VEHICLE_NO: vehicleNo,
     DESTINATION: dest,
-    CUSTOMER_NAME: esc(inv.customer_name),
-    CUSTOMER_ADDRESS: esc(inv.customer_address || '').replace(/\n/g, '<br/>'),
-    CUSTOMER_PHONE: inv.customer_phone ? esc(`Phone No: ${inv.customer_phone}`) : '&#160;',
-    CUSTOMER_GSTIN_LINE: inv.customer_gstin ? esc(`GSTIN: ${inv.customer_gstin}`) : '&#160;',
+    CUSTOMER_NAME: esc(invN.customer_name),
+    CUSTOMER_ADDRESS: esc(invN.customer_address || '').replace(/\n/g, '<br/>'),
+    CUSTOMER_PHONE: invN.customer_phone ? esc(`Phone No: ${invN.customer_phone}`) : '&#160;',
+    CUSTOMER_GSTIN_LINE: invN.customer_gstin ? esc(`GSTIN: ${invN.customer_gstin}`) : '&#160;',
     POS_STATE_NAME: esc(posStateName),
     POS_STATE_CODE: esc(posStateCode),
     SHIP_TO_BLOCK: shipInner,
@@ -481,7 +482,7 @@ function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
     ITEMS_BODY: itemsBody,
     TOTALS_LEFT: totalsLeft,
     TOTALS_RIGHT: totalsRight,
-    AMOUNT_WORDS: esc(amountInWordsFromPaise(inv.total).toUpperCase()),
+    AMOUNT_WORDS: esc(amountInWordsFromPaise(invN.total).toUpperCase()),
     TERMS_BLOCK: termsBlock,
     BANK_COL_LEFT: bankColLeft,
     BANK_COL_RIGHT: bankColRight,
@@ -501,16 +502,17 @@ function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
 }
 
 function buildStandardInvoiceHtml({ invoice: inv, items }, templateRow) {
+  const invN = inv;
   const L = mergeLayout(templateRow);
   const key = templateRow?.template_key === 'simple' ? 'simple' : templateRow?.template_key === 'trade' ? 'trade' : 'standard';
   if (key === 'trade') {
-    return buildTradeInvoiceHtml({ invoice: inv, items }, templateRow);
+    return buildTradeInvoiceHtml({ invoice: invN, items }, templateRow);
   }
   const tplPath = path.join(TEMPLATE_DIR, key === 'simple' ? 'template_simple.html' : 'template_standard.html');
   let html = fs.readFileSync(tplPath, 'utf8');
 
-  const companyId = inv.company_id;
-  const { logo, signature } = resolveLogoSignatureDataUri(companyId, inv, L);
+  const companyId = invN.company_id;
+  const { logo, signature } = resolveLogoSignatureDataUri(companyId, invN, L);
   const hasIgst = items.some((i) => Number(i.igst_amount) > 0);
   const font = L.font === 'serif' ? "Georgia, 'Times New Roman', serif" : "'Segoe UI', system-ui, sans-serif";
 
@@ -518,17 +520,17 @@ function buildStandardInvoiceHtml({ invoice: inv, items }, templateRow) {
     ? `<img src="${logo}" alt="Logo" style="max-height:52px;margin-bottom:8px;display:block;" />`
     : '';
 
-  const vehicleInner = (L.show_vehicle_details_block !== false) && inv.chassis_number
+  const vehicleInner = (L.show_vehicle_details_block !== false) && invN.chassis_number
     ? `<div class="party"><h4>Vehicle Details</h4>
-        <p>${esc([inv.vehicle_make, inv.vehicle_model, inv.vehicle_variant].filter(Boolean).join(' '))}</p>
-        <p>Chassis: ${esc(inv.chassis_number)}</p>
-        <p>Engine: ${esc(inv.engine_number || '—')}</p>
-        <p>Color: ${esc(inv.vehicle_color || '—')} · Year: ${esc(inv.vehicle_year || '—')}</p>
+        <p>${esc([invN.vehicle_make, invN.vehicle_model, invN.vehicle_variant].filter(Boolean).join(' '))}</p>
+        <p>Chassis: ${esc(invN.chassis_number)}</p>
+        <p>Engine: ${esc(invN.engine_number || '—')}</p>
+        <p>Color: ${esc(invN.vehicle_color || '—')} · Year: ${esc(invN.vehicle_year || '—')}</p>
        </div>`
     : '<div></div>';
 
-  const vehicleSimple = (L.show_vehicle_details_block !== false) && inv.chassis_number
-    ? `<div class="sub"><strong>Vehicle:</strong> ${esc([inv.vehicle_make, inv.vehicle_model].filter(Boolean).join(' '))} · Chassis ${esc(inv.chassis_number)}</div>`
+  const vehicleSimple = (L.show_vehicle_details_block !== false) && invN.chassis_number
+    ? `<div class="sub"><strong>Vehicle:</strong> ${esc([invN.vehicle_make, invN.vehicle_model].filter(Boolean).join(' '))} · Chassis ${esc(invN.chassis_number)}</div>`
     : '';
 
   let itemsHead;
@@ -574,20 +576,20 @@ function buildStandardInvoiceHtml({ invoice: inv, items }, templateRow) {
   }
 
   const totalsRows = `
-    <tr><td>Subtotal</td><td class="num">₹${formatPaise(inv.subtotal)}</td></tr>
-    ${Number(inv.discount) > 0 ? `<tr><td>Discount</td><td class="num" style="color:#b91c1c">- ₹${formatPaise(inv.discount)}</td></tr>` : ''}
-    ${Number(inv.cgst_amount) > 0 ? `<tr><td>CGST</td><td class="num">₹${formatPaise(inv.cgst_amount)}</td></tr>` : ''}
-    ${Number(inv.sgst_amount) > 0 ? `<tr><td>SGST</td><td class="num">₹${formatPaise(inv.sgst_amount)}</td></tr>` : ''}
-    ${Number(inv.igst_amount) > 0 ? `<tr><td>IGST</td><td class="num">₹${formatPaise(inv.igst_amount)}</td></tr>` : ''}
-    <tr class="grand"><td>GRAND TOTAL</td><td class="num">₹${formatPaise(inv.total)}</td></tr>`;
+    <tr><td>Subtotal</td><td class="num">₹${formatPaise(invN.subtotal)}</td></tr>
+    ${Number(invN.discount) > 0 ? `<tr><td>Discount</td><td class="num" style="color:#b91c1c">- ₹${formatPaise(invN.discount)}</td></tr>` : ''}
+    ${Number(invN.cgst_amount) > 0 ? `<tr><td>CGST</td><td class="num">₹${formatPaise(invN.cgst_amount)}</td></tr>` : ''}
+    ${Number(invN.sgst_amount) > 0 ? `<tr><td>SGST</td><td class="num">₹${formatPaise(invN.sgst_amount)}</td></tr>` : ''}
+    ${Number(invN.igst_amount) > 0 ? `<tr><td>IGST</td><td class="num">₹${formatPaise(invN.igst_amount)}</td></tr>` : ''}
+    <tr class="grand"><td>GRAND TOTAL</td><td class="num">₹${formatPaise(invN.total)}</td></tr>`;
 
   const totalsRowsSimple = `
-    <tr><td>Subtotal</td><td class="r">₹${formatPaise(inv.subtotal)}</td></tr>
-    ${Number(inv.discount) > 0 ? `<tr><td>Discount</td><td class="r">-₹${formatPaise(inv.discount)}</td></tr>` : ''}
-    ${Number(inv.cgst_amount) > 0 ? `<tr><td>CGST</td><td class="r">₹${formatPaise(inv.cgst_amount)}</td></tr>` : ''}
-    ${Number(inv.sgst_amount) > 0 ? `<tr><td>SGST</td><td class="r">₹${formatPaise(inv.sgst_amount)}</td></tr>` : ''}
-    ${Number(inv.igst_amount) > 0 ? `<tr><td>IGST</td><td class="r">₹${formatPaise(inv.igst_amount)}</td></tr>` : ''}
-    <tr class="grand"><td>Total</td><td class="r">₹${formatPaise(inv.total)}</td></tr>`;
+    <tr><td>Subtotal</td><td class="r">₹${formatPaise(invN.subtotal)}</td></tr>
+    ${Number(invN.discount) > 0 ? `<tr><td>Discount</td><td class="r">-₹${formatPaise(invN.discount)}</td></tr>` : ''}
+    ${Number(invN.cgst_amount) > 0 ? `<tr><td>CGST</td><td class="r">₹${formatPaise(invN.cgst_amount)}</td></tr>` : ''}
+    ${Number(invN.sgst_amount) > 0 ? `<tr><td>SGST</td><td class="r">₹${formatPaise(invN.sgst_amount)}</td></tr>` : ''}
+    ${Number(invN.igst_amount) > 0 ? `<tr><td>IGST</td><td class="r">₹${formatPaise(invN.igst_amount)}</td></tr>` : ''}
+    <tr class="grand"><td>Total</td><td class="r">₹${formatPaise(invN.total)}</td></tr>`;
 
   const termsBlock = L.show_terms && L.terms_text
     ? `<div class="terms"><strong>Terms &amp; conditions</strong><br/>${esc(L.terms_text)}</div>`
@@ -599,54 +601,54 @@ function buildStandardInvoiceHtml({ invoice: inv, items }, templateRow) {
 
   const signTitle = esc(L.signatory_title || 'Authorised Signatory');
   const signBlock = L.show_signature
-    ? `<p style="font-size:10px">For <strong>${esc(inv.company_name)}</strong></p>
+    ? `<p style="font-size:10px">For <strong>${esc(invN.company_name)}</strong></p>
        <div style="min-height:36px">${signature ? `<img src="${signature}" alt="Signature" />` : ''}</div>
        <p style="font-size:10px;border-top:1px solid #333;padding-top:4px">${signTitle}</p>`
-    : `<p style="font-size:10px">For <strong>${esc(inv.company_name)}</strong></p><p style="font-size:10px">${signTitle}</p>`;
+    : `<p style="font-size:10px">For <strong>${esc(invN.company_name)}</strong></p><p style="font-size:10px">${signTitle}</p>`;
 
   const signSimple = L.show_signature
-    ? `<div>For ${esc(inv.company_name)}</div>${signature ? `<img src="${signature}" alt="sig" />` : '<div style="height:36px"></div>'}<div>${signTitle}</div>`
-    : `<div>For ${esc(inv.company_name)}</div><div>${signTitle}</div>`;
+    ? `<div>For ${esc(invN.company_name)}</div>${signature ? `<img src="${signature}" alt="sig" />` : '<div style="height:36px"></div>'}<div>${signTitle}</div>`
+    : `<div>For ${esc(invN.company_name)}</div><div>${signTitle}</div>`;
 
-  const einvoiceBlock = inv.irn
+  const einvoiceBlock = invN.irn
     ? `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:10px 14px;margin-bottom:12px;">
         <p style="font-size:9px;color:#16a34a;font-weight:600;">E-INVOICE (IRN)</p>
-        <p style="font-size:10px;font-family:monospace;word-break:break-all;">${esc(inv.irn)}</p>
-        ${irnQrImgHtml(inv, { leadingBreak: false })}
+        <p style="font-size:10px;font-family:monospace;word-break:break-all;">${esc(invN.irn)}</p>
+        ${irnQrImgHtml(invN, { leadingBreak: false })}
        </div>`
     : '';
 
-  const qrBlock = !inv.irn && L.show_qr_code
+  const qrBlock = !invN.irn && L.show_qr_code
     ? '<div style="margin-top:12px;text-align:center;color:#94a3b8;font-size:9px;">QR placeholder</div>'
     : '';
 
-  const loanBlock = L.show_loan_summary && inv.loan_amount != null && Number(inv.loan_amount) > 0
+  const loanBlock = L.show_loan_summary && invN.loan_amount != null && Number(invN.loan_amount) > 0
     ? `<div class="loan-box"><strong>Loan summary</strong><br/>
-        Bank: ${esc(inv.loan_bank_name || '—')}<br/>
-        Amount: ₹${formatPaise(inv.loan_amount)} · EMI: ₹${formatPaise(inv.loan_emi_amount || 0)} · Tenure: ${esc(inv.loan_tenure_months || '—')} months
+        Bank: ${esc(invN.loan_bank_name || '—')}<br/>
+        Amount: ₹${formatPaise(invN.loan_amount)} · EMI: ₹${formatPaise(invN.loan_emi_amount || 0)} · Tenure: ${esc(invN.loan_tenure_months || '—')} months
        </div>`
     : '';
 
-  const headerHtml = buildHeaderHtml(inv, L, logoBlock);
+  const headerHtml = buildHeaderHtml(invN, L, logoBlock);
 
-  const invoiceBarcodeSimple = inv.invoice_barcode_data_uri
-    ? `<div style="text-align:center;margin:10px 0 6px"><img src="${inv.invoice_barcode_data_uri}" alt="" style="max-height:40px;max-width:100%" /></div>`
+  const invoiceBarcodeSimple = invN.invoice_barcode_data_uri
+    ? `<div style="text-align:center;margin:10px 0 6px"><img src="${invN.invoice_barcode_data_uri}" alt="" style="max-height:40px;max-width:100%" /></div>`
     : '';
 
   const map = {
     PRIMARY_COLOR: esc(L.primary_color || '#1a56db'),
     FONT_FAMILY: font,
     HEADER_HTML: headerHtml,
-    COMPANY_NAME: esc(inv.company_name),
-    COMPANY_ADDRESS: esc(inv.company_address || ''),
-    COMPANY_GSTIN: esc(inv.company_gstin || '—'),
-    COMPANY_PHONE: esc(inv.company_phone || ''),
-    INVOICE_NUMBER: esc(inv.invoice_number),
-    INVOICE_DATE: formatDate(inv.invoice_date),
-    CUSTOMER_NAME: esc(inv.customer_name),
-    CUSTOMER_ADDRESS: esc(inv.customer_address || ''),
-    CUSTOMER_PHONE: inv.customer_phone ? esc(`Phone: ${inv.customer_phone}`) : '',
-    CUSTOMER_GSTIN_LINE: inv.customer_gstin ? esc(`GSTIN: ${inv.customer_gstin}`) : '',
+    COMPANY_NAME: esc(invN.company_name),
+    COMPANY_ADDRESS: esc(invN.company_address || ''),
+    COMPANY_GSTIN: esc(invN.company_gstin || '—'),
+    COMPANY_PHONE: esc(invN.company_phone || ''),
+    INVOICE_NUMBER: esc(invN.invoice_number),
+    INVOICE_DATE: formatDate(invN.invoice_date),
+    CUSTOMER_NAME: esc(invN.customer_name),
+    CUSTOMER_ADDRESS: esc(invN.customer_address || ''),
+    CUSTOMER_PHONE: invN.customer_phone ? esc(`Phone: ${invN.customer_phone}`) : '',
+    CUSTOMER_GSTIN_LINE: invN.customer_gstin ? esc(`GSTIN: ${invN.customer_gstin}`) : '',
     VEHICLE_BLOCK: vehicleInner,
     VEHICLE_SIMPLE: vehicleSimple,
     ITEMS_HEAD: itemsHead || '',
@@ -655,7 +657,7 @@ function buildStandardInvoiceHtml({ invoice: inv, items }, templateRow) {
     ITEMS_BODY_SIMPLE: itemsBodySimple || '',
     TOTALS_ROWS: totalsRows,
     TOTALS_ROWS_SIMPLE: totalsRowsSimple,
-    AMOUNT_WORDS: esc(amountInWordsFromPaise(inv.total)),
+    AMOUNT_WORDS: esc(amountInWordsFromPaise(invN.total)),
     TERMS_BLOCK: termsBlock,
     BANK_BLOCK: bankBlock,
     SIGNATURE_BLOCK: signBlock,
