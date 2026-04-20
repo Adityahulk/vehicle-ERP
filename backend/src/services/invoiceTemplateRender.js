@@ -39,7 +39,14 @@ function stateNameFromGstin(gstin) {
 function mergeLayout(templateRow) {
   const raw = templateRow?.layout_config;
   const cfg = typeof raw === 'object' && raw && !Array.isArray(raw) ? raw : {};
-  return { ...DEFAULT_LAYOUT, ...cfg };
+  const merged = { ...DEFAULT_LAYOUT, ...cfg };
+  if (typeof merged.bank_details === 'string') {
+    merged.bank_details = merged.bank_details
+      .replace(/\r\n/g, '\n')
+      .replace(/\\r\\n/g, '\n')
+      .replace(/\\n/g, '\n');
+  }
+  return merged;
 }
 
 /** Non-empty per-template fields override company snapshot on PDF/HTML (all invoice layouts). */

@@ -46,9 +46,88 @@ const DEFAULT_LAYOUT = {
   show_company_email: false,
 };
 
+function normalizeBankDetailsStored(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/\r\n/g, '\n').replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n');
+}
+
+/** First line = account / legal name; rest = bank rows (matches common trade PDF layout). */
+function splitBankDetailsLines(stored) {
+  const raw = normalizeBankDetailsStored(typeof stored === 'string' ? stored : '');
+  const i = raw.indexOf('\n');
+  if (i === -1) return { headline: '', accountsBlock: raw };
+  return { headline: raw.slice(0, i), accountsBlock: raw.slice(i + 1).replace(/^\n+/, '') };
+}
+
+function joinBankDetailsLines(headline, accountsBlock) {
+  const h = (headline || '').replace(/\r\n/g, '\n').trimEnd();
+  const a = (accountsBlock || '').replace(/\r\n/g, '\n');
+  if (h && a) return `${h}\n${a}`;
+  if (h) return h;
+  return a;
+}
+
 function mergeLayout(row) {
   const lc = row?.layout_config && typeof row.layout_config === 'object' ? row.layout_config : {};
-  return { ...DEFAULT_LAYOUT, ...lc };
+  const merged = { ...DEFAULT_LAYOUT, ...lc };
+  merged.bank_details = normalizeBankDetailsStored(merged.bank_details || '');
+  return merged;
+}
+
+function BankDetailsEditor({ layoutForm, setLayoutForm }) {
+  const { headline, accountsBlock } = splitBankDetailsLines(layoutForm.bank_details || '');
+  return (
+    <div className="space-y-4 rounded-lg border-2 border-primary/25 bg-background p-4 shadow-sm ring-1 ring-border">
+      <div>
+        <h4 className="text-sm font-semibold text-foreground">Bank details on PDF</h4>
+        <p className="text-xs text-muted-foreground mt-1">
+          Everything below is editable. Turn on the switch, change the text, then click Save at the bottom of this panel. This text is stored only on this template (not in company settings).
+        </p>
+      </div>
+      <label className="flex items-center gap-2 text-sm cursor-pointer rounded-md border border-input bg-muted/30 px-3 py-2">
+        <input
+          type="checkbox"
+          className="h-4 w-4"
+          checked={!!layoutForm.show_bank_details}
+          onChange={(e) => setLayoutForm((p) => ({ ...p, show_bank_details: e.target.checked }))}
+        />
+        <span>Show bank details block on invoices that use this template</span>
+      </label>
+      <div className="space-y-3">
+        <div className="space-y-2">
+          <Label htmlFor="bank_headline" className="text-xs font-medium">
+            Account / legal name (first line, e.g. as on cheque)
+          </Label>
+          <Input
+            id="bank_headline"
+            className="bg-background font-medium"
+            placeholder="e.g. MAVIDYA GROUP PVT. LTD."
+            value={headline}
+            onChange={(e) => setLayoutForm((p) => {
+              const { accountsBlock: ac } = splitBankDetailsLines(p.bank_details || '');
+              return { ...p, bank_details: joinBankDetailsLines(e.target.value, ac) };
+            })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="bank_accounts" className="text-xs font-medium">
+            Bank accounts, IFSC, branch (one line per bank or use line breaks)
+          </Label>
+          <Textarea
+            id="bank_accounts"
+            rows={8}
+            className="min-h-[168px] resize-y bg-background font-mono text-sm leading-relaxed"
+            placeholder={'SBI A/C NO. … | IFSC … | Branch: …\nRBL A/C No. … | IFSC … | Branch: …\n\nTrade layout: put a line containing only --- between left and right columns.'}
+            value={accountsBlock}
+            onChange={(e) => setLayoutForm((p) => {
+              const { headline: h } = splitBankDetailsLines(p.bank_details || '');
+              return { ...p, bank_details: joinBankDetailsLines(h, e.target.value) };
+            })}
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function TemplateThumbnail({ templateId, refreshKey }) {
@@ -388,6 +467,8 @@ export default function InvoiceTemplates() {
                 </div>
               </div>
 
+              <BankDetailsEditor layoutForm={layoutForm} setLayoutForm={setLayoutForm} />
+
               <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
                 <h4 className="text-sm font-medium">Seller on invoice (letterhead)</h4>
                 <p className="text-xs text-muted-foreground">
@@ -447,30 +528,6 @@ export default function InvoiceTemplates() {
                     <span>Show email next to phone (trade header)</span>
                   </label>
                 )}
-              </div>
-
-              <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
-                <h4 className="text-sm font-medium">Bank details on invoice</h4>
-                <p className="text-xs text-muted-foreground">
-                  Shown in the bank section when enabled. Use line breaks; use a line with only <span className="font-mono">---</span> to split into two columns on the trade layout.
-                </p>
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={!!layoutForm.show_bank_details}
-                    onChange={(e) => setLayoutForm((p) => ({ ...p, show_bank_details: e.target.checked }))}
-                  />
-                  <span>Show bank details on PDF</span>
-                </label>
-                <div className="space-y-2">
-                  <Label className="text-xs">Bank accounts &amp; IFSC (printed text)</Label>
-                  <Textarea
-                    rows={5}
-                    placeholder="e.g. SBI A/C … IFSC …&#10;---&#10;RBL A/C …"
-                    value={layoutForm.bank_details || ''}
-                    onChange={(e) => setLayoutForm((p) => ({ ...p, bank_details: e.target.value }))}
-                  />
-                </div>
               </div>
 
               <div className="space-y-3">
