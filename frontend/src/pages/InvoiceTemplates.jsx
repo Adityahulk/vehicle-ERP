@@ -356,6 +356,7 @@ export default function InvoiceTemplates() {
                       </Select>
                       <p className="text-xs text-muted-foreground">
                         Presets use scanned signatories from your GST pack. Uploaded file is ignored when a preset is selected.
+                        Invoice PDFs from Sales follow the template marked Default (or the template you pick on download) — edit that row’s signature source if PDFs still show a preset.
                       </p>
                     </div>
                     <div className="space-y-1.5">

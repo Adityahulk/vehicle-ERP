@@ -76,10 +76,10 @@ function buildQuotationHtml(bundle) {
 
   const companyId = q.company_id;
   let logoUri = '';
-  const logoPath = findCompanyAsset(companyId, 'logo') || tryLegacyUploadUrl(bundle.logo_url || co.logo_url);
+  const logoPath = tryLegacyUploadUrl(bundle.logo_url || co.logo_url) || findCompanyAsset(companyId, 'logo');
   if (logoPath) logoUri = fileToDataUri(logoPath);
   let sigUri = '';
-  const sigPath = findCompanyAsset(companyId, 'signature') || tryLegacyUploadUrl(bundle.signature_url || co.signature_url);
+  const sigPath = tryLegacyUploadUrl(bundle.signature_url || co.signature_url) || findCompanyAsset(companyId, 'signature');
   if (sigPath) sigUri = fileToDataUri(sigPath);
 
   const logoBlock = logoUri

@@ -112,9 +112,26 @@ function findCompanyAsset(companyId, kind) {
   const dir = path.join(UPLOADS_ROOT, sub, companyId);
   if (!fs.existsSync(dir)) return null;
   const prefix = kind === 'logo' ? 'logo' : 'signature';
-  const files = fs.readdirSync(dir);
-  const hit = files.find((f) => f.startsWith(`${prefix}.`));
-  return hit ? path.join(dir, hit) : null;
+  const files = fs.readdirSync(dir).filter((f) => {
+    if (f.startsWith('.')) return false;
+    return f.toLowerCase().startsWith(`${prefix}.`);
+  });
+  if (files.length === 0) return null;
+  let bestPath = null;
+  let bestMtime = -1;
+  for (const f of files) {
+    const full = path.join(dir, f);
+    try {
+      const m = fs.statSync(full).mtimeMs;
+      if (m >= bestMtime) {
+        bestMtime = m;
+        bestPath = full;
+      }
+    } catch {
+      /* skip broken symlink etc. */
+    }
+  }
+  return bestPath;
 }
 
 function tryLegacyUploadUrl(url) {
@@ -135,20 +152,23 @@ function resolveLogoDataUri(companyId, invoice, layout) {
     const presetPath = path.join(PRESET_LOGO_DIR, LOGO_PRESET_FILES[asset]);
     if (fs.existsSync(presetPath)) return fileToDataUri(presetPath);
   }
-  const p = findCompanyAsset(companyId, 'logo') || tryLegacyUploadUrl(invoice.logo_url);
+  const p = tryLegacyUploadUrl(invoice.logo_url) || findCompanyAsset(companyId, 'logo');
   return p ? fileToDataUri(p) : '';
 }
 
 function resolveSignatureDataUri(companyId, invoice, layout) {
   if (!layout.show_signature) return '';
   const raw = layout.signature_asset;
-  const asset = typeof raw === 'string' ? raw.trim() : '';
+  const asset = typeof raw === 'string'
+    ? raw.trim()
+    : (raw != null && typeof raw !== 'object' ? String(raw).trim() : '');
   const useCompanyUpload = !asset || asset.toLowerCase() === 'company_upload';
   if (!useCompanyUpload && SIGNATURE_PRESET_FILES[asset]) {
     const presetPath = path.join(PRESET_SIGN_DIR, SIGNATURE_PRESET_FILES[asset]);
     if (fs.existsSync(presetPath)) return fileToDataUri(presetPath);
   }
-  const p = findCompanyAsset(companyId, 'signature') || tryLegacyUploadUrl(invoice.signature_url);
+  /** Prefer DB path (matches last upload); else newest signature.* on disk (avoids stale second extension). */
+  const p = tryLegacyUploadUrl(invoice.signature_url) || findCompanyAsset(companyId, 'signature');
   return p ? fileToDataUri(p) : '';
 }
 

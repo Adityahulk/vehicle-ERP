@@ -723,12 +723,13 @@ export default function SalesPage() {
     queryFn: () => api.get('/invoice-templates').then((r) => r.data.templates),
   });
 
-  /** Prefer full trade layout (MVG-style) for PDFs when that template exists. */
+  /** Use the company default template for PDFs (same as server when templateId omitted). */
   const preferredPdfTemplateId = useMemo(() => {
+    const def = invoiceTemplates.find((t) => t.is_default);
+    if (def?.id) return def.id;
     const trade = invoiceTemplates.find((t) => t.template_key === 'trade');
     if (trade?.id) return trade.id;
-    const def = invoiceTemplates.find((t) => t.is_default);
-    return def?.id || invoiceTemplates[0]?.id || '';
+    return invoiceTemplates[0]?.id || '';
   }, [invoiceTemplates]);
 
   const { data, isLoading } = useInvoices(
