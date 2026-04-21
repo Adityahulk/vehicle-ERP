@@ -21,24 +21,29 @@ const { logAudit } = require('../middleware/auditLog');
 const { insertLoanForInvoiceInTransaction } = require('./loansController');
 
 async function generateInvoiceNumber(client, companyId, branchId) {
-  const year = new Date().getFullYear();
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
 
-  // Get branch code (first 3 chars uppercase)
+  // IRN-safe compact number: I + YYMMDD + branch(2) + seq(4), max 13 chars.
   const { rows: brRows } = await client.query(
     `SELECT name FROM branches WHERE id = $1`,
     [branchId],
   );
-  const branchCode = (brRows[0]?.name || 'GEN').substring(0, 3).toUpperCase();
+  const rawBranch = (brRows[0]?.name || 'GN').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const branchCode = (rawBranch || 'GN').slice(0, 2).padEnd(2, 'X');
+  const prefix = `I${yy}${mm}${dd}${branchCode}`;
 
-  // Get next sequence for this company+year
+  // Get next sequence for this company + daily prefix.
   const { rows: seqRows } = await client.query(
     `SELECT COUNT(*)::int + 1 AS seq FROM invoices
      WHERE company_id = $1 AND invoice_number LIKE $2`,
-    [companyId, `INV-${year}-${branchCode}-%`],
+    [companyId, `${prefix}%`],
   );
   const seq = String(seqRows[0].seq).padStart(4, '0');
 
-  return `INV-${year}-${branchCode}-${seq}`;
+  return `${prefix}${seq}`;
 }
 
 function computeInvoiceItems(items, interstate) {
