@@ -1003,29 +1003,17 @@ export default function SalesPage() {
                       {inv.irn_status === 'generated' && (!inv.eway_bill_status || inv.eway_bill_status !== 'generated') && canWrite && eInvoiceStatus?.ewayConfigured && (
                         <Button variant="ghost" size="sm" title="Generate E-Way Bill (TaxPro)"
                           onClick={() => { 
-                            const now = new Date();
-                            const dd = String(now.getDate()).padStart(2, '0');
-                            const mm = String(now.getMonth() + 1).padStart(2, '0');
-                            const yyyy = now.getFullYear();
-                            const distance = window.prompt("Enter Distance (km):", "100");
-                            if (!distance) return;
                             const vehNo = window.prompt("Enter Vehicle Number (e.g. MH12AB1234):", "");
                             if (!vehNo) return;
-                            const transId = window.prompt("Enter Transporter ID (GSTIN):", "27AAAAA0000A1Z5");
-                            if (!transId) return;
-                            const transDocNo = window.prompt("Enter Transport Document No:", "LR-001");
-                            if (!transDocNo) return;
-                            const transDocDt = window.prompt("Enter Transport Document Date (DD/MM/YYYY):", `${dd}/${mm}/${yyyy}`);
-                            if (!transDocDt) return;
+                            const transId = window.prompt("Transporter GSTIN (leave blank if own vehicle):", "") || "";
 
-                            api.post(`/invoices/${inv.id}/ewaybill/generate`, {
-                              distance_km: parseInt(distance),
+                            const payload = {
                               vehicle_no: vehNo,
-                              transporter_id: transId,
                               transport_mode: "1",
-                              trans_doc_no: transDocNo,
-                              trans_doc_dt: transDocDt,
-                            }).then(() => {
+                            };
+                            if (transId.trim()) payload.transporter_id = transId.trim();
+
+                            api.post(`/invoices/${inv.id}/ewaybill/generate`, payload).then(() => {
                               queryClient.invalidateQueries({ queryKey: ['invoices'] });
                               toast.success('E-Way bill generated.');
                             }).catch(err => toast.error(err.response?.data?.error || 'E-Way bill generation failed'));

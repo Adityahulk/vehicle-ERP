@@ -376,8 +376,8 @@ router.post('/:id/ewaybill/generate', requireNotRole('ca'), requireMinRole('bran
     }
 
     const transportArgs = req.body;
-    if (!transportArgs.distance_km || !transportArgs.transporter_id || !transportArgs.vehicle_no) {
-      return res.status(400).json({ success: false, error: 'distance_km, transporter_id, and vehicle_no are required' });
+    if (!transportArgs.vehicle_no) {
+      return res.status(400).json({ success: false, error: 'vehicle_no is required' });
     }
 
     const { rows: inv } = await query(
