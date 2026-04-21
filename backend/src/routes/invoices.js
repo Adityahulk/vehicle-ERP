@@ -8,6 +8,7 @@ const {
   generateInvoicePdf,
   generateInvoiceHtmlForPreview,
   attachInvoiceBarcodeDataUri,
+  htmlToPdfBuffer,
 } = require('../services/pdfService');
 const {
   fetchInvoiceTemplateRow,
@@ -20,6 +21,15 @@ const { logAudit } = require('../middleware/auditLog');
 
 const router = Router();
 router.use(verifyToken);
+
+function escHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 const customerSchema = z.object({
   name: z.string().min(1),
@@ -483,6 +493,71 @@ router.post('/:id/ewaybill/cancel', requireNotRole('ca'), requireMinRole('branch
   } catch (err) {
     console.error('E-Way cancellation failed:', err.message);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/:id/ewaybill/pdf', async (req, res) => {
+  try {
+    const company_id = req.user.company_id;
+    const invoiceId = req.params.id;
+    const denied = await ic.invoiceBranchAccessError(req, invoiceId);
+    if (denied) return res.status(denied.status).json({ success: false, error: denied.error });
+
+    const { rows } = await query(
+      `SELECT i.invoice_number, i.invoice_date, i.eway_bill_no, i.eway_bill_date, i.eway_bill_valid_until,
+              COALESCE(i.seller_name, co.name) AS company_name, COALESCE(i.seller_gstin, co.gstin) AS company_gstin,
+              COALESCE(i.seller_address, co.address) AS company_address,
+              COALESCE(i.bill_to_name, c.name) AS customer_name, COALESCE(i.bill_to_gstin, c.gstin) AS customer_gstin
+       FROM invoices i
+       INNER JOIN companies co ON co.id = i.company_id AND co.is_deleted = FALSE
+       INNER JOIN customers c ON c.id = i.customer_id AND c.company_id = i.company_id AND c.is_deleted = FALSE
+       WHERE i.id = $1 AND i.company_id = $2 AND i.is_deleted = FALSE`,
+      [invoiceId, company_id],
+    );
+    if (!rows.length) return res.status(404).json({ success: false, error: 'Invoice not found' });
+    const inv = rows[0];
+    if (!inv.eway_bill_no) {
+      return res.status(400).json({ success: false, error: 'No E-Way bill generated for this invoice' });
+    }
+
+    const fmt = (d) => (d ? new Date(d).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+    const ewbPortal = `https://ewaybillgst.gov.in/`;
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"/><style>
+  body{font-family:Segoe UI,Arial,sans-serif;color:#111;padding:28px}
+  .card{border:1px solid #d1d5db;border-radius:10px;padding:18px}
+  h1{font-size:20px;margin:0 0 8px}
+  .muted{color:#6b7280;font-size:12px}
+  table{width:100%;border-collapse:collapse;margin-top:12px}
+  td{padding:8px 10px;border-bottom:1px solid #e5e7eb;vertical-align:top}
+  td.k{width:34%;color:#374151;font-weight:600}
+  .num{font-family:ui-monospace,Menlo,Consolas,monospace}
+</style></head><body>
+  <div class="card">
+    <h1>E-Way Bill Details</h1>
+    <div class="muted">Generated from invoice ${escHtml(inv.invoice_number)}</div>
+    <table>
+      <tr><td class="k">E-Way Bill No</td><td class="num">${escHtml(inv.eway_bill_no)}</td></tr>
+      <tr><td class="k">Generated At</td><td>${escHtml(fmt(inv.eway_bill_date))}</td></tr>
+      <tr><td class="k">Valid Upto</td><td>${escHtml(fmt(inv.eway_bill_valid_until))}</td></tr>
+      <tr><td class="k">Invoice No / Date</td><td>${escHtml(inv.invoice_number)} / ${escHtml(fmt(inv.invoice_date))}</td></tr>
+      <tr><td class="k">Seller</td><td>${escHtml(inv.company_name)} (${escHtml(inv.company_gstin || '—')})<br/>${escHtml(inv.company_address || '')}</td></tr>
+      <tr><td class="k">Buyer</td><td>${escHtml(inv.customer_name)} (${escHtml(inv.customer_gstin || '—')})</td></tr>
+      <tr><td class="k">Portal</td><td><a href="${ewbPortal}">${ewbPortal}</a></td></tr>
+    </table>
+  </div>
+</body></html>`;
+
+    const pdfBuffer = await htmlToPdfBuffer(html);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="eway-${inv.eway_bill_no}.pdf"`,
+      'Content-Length': pdfBuffer.length,
+    });
+    return res.send(pdfBuffer);
+  } catch (err) {
+    console.error('E-Way PDF download failed:', err.message);
+    return res.status(500).json({ success: false, error: 'E-Way PDF download failed' });
   }
 });
 

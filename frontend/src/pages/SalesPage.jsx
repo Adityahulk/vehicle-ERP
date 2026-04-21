@@ -807,6 +807,22 @@ export default function SalesPage() {
     }
   };
 
+  const downloadEwayPdf = async (invoiceId, ewayNo) => {
+    try {
+      const response = await api.get(`/invoices/${invoiceId}/ewaybill/pdf`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `eway-${ewayNo || invoiceId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'E-Way PDF download failed');
+    }
+  };
+
   const { canWrite, isCA } = usePermissions();
 
   return (
@@ -1023,12 +1039,22 @@ export default function SalesPage() {
                         </Button>
                       )}
                       {inv.eway_bill_status === 'generated' && (
-                        <Button variant="ghost" size="sm" title="E-Way Bill Details" onClick={() => {
-                          const msg = `E-Way Bill No: ${inv.eway_bill_no}\nValid Until: ${formatDate(inv.eway_bill_valid_until)}`;
-                          window.alert(msg);
-                        }}>
-                          <FileText className="h-3.5 w-3.5 text-blue-800" />
-                        </Button>
+                        <>
+                          <Button variant="ghost" size="sm" title="E-Way Bill Details" onClick={() => {
+                            const msg = `E-Way Bill No: ${inv.eway_bill_no}\nValid Until: ${formatDate(inv.eway_bill_valid_until)}`;
+                            window.alert(msg);
+                          }}>
+                            <FileText className="h-3.5 w-3.5 text-blue-800" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Download E-Way Bill PDF"
+                            onClick={() => downloadEwayPdf(inv.id, inv.eway_bill_no)}
+                          >
+                            <Download className="h-3.5 w-3.5 text-blue-700" />
+                          </Button>
+                        </>
                       )}
                       {inv.status === 'draft' && canWrite && (
                         <Button variant="ghost" size="sm" title="Confirm"
