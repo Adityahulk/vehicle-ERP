@@ -886,9 +886,23 @@ async function generateEwayBill(_companyId, irn, transportArgs, userGstin, parti
     }
 
     const u = unwrapData(data);
-    const { ewbNo, ewbDt, validUpto } = pickEwbGenFields(u);
+    let { ewbNo, ewbDt, validUpto } = pickEwbGenFields(u);
 
-    if (!response.ok || !ewbNo) {
+    // Fallback: check raw response directly (GENEWAYBILL returns fields at top level, not wrapped in Data)
+    if (!ewbNo && data?.ewayBillNo) {
+      const fallback = pickEwbGenFields(data);
+      ewbNo = fallback.ewbNo;
+      ewbDt = fallback.ewbDt;
+      validUpto = fallback.validUpto;
+    }
+
+    if (ewbNo) {
+      // Success — even if response.ok is oddly false or there's an alert field
+      console.info(`[taxPro] ewb generated successfully: ewbNo=${ewbNo} ewbDt=${ewbDt} validUpto=${validUpto} alert="${data?.alert || u?.alert || ''}" `);
+      return { ewbNo, ewbDt, validUpto };
+    }
+
+    if (!response.ok) {
       if (attempt === 0 && isAuthTokenExpiredError(data)) {
         await cacheTokenDelete(memoryEwb, redisKey);
         continue;
@@ -897,7 +911,9 @@ async function generateEwayBill(_companyId, irn, transportArgs, userGstin, parti
       throw new Error(`TaxPro E-Way Bill generation failed: ${parseTaxProError(data)} (HTTP ${response.status})`);
     }
 
-    return { ewbNo, ewbDt, validUpto };
+    // HTTP 200 but no ewbNo — unexpected
+    logTaxProFailure('generateEwayBill', response, data);
+    throw new Error(`TaxPro E-Way Bill generation failed: unexpected response — ${parseTaxProError(data)} (HTTP ${response.status})`);
   }
   throw new Error('TaxPro E-Way Bill generation failed: unable to refresh auth token');
 }
