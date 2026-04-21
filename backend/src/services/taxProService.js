@@ -207,7 +207,9 @@ function extractAuthToken(body) {
   const u = unwrapData(body);
   const t = u?.AuthToken
     || u?.authToken
+    || u?.authtoken
     || body?.AuthToken
+    || body?.authtoken
     || body?.auth_token
     || body?.access_token;
   return typeof t === 'string' && t.trim() ? t.trim() : null;
