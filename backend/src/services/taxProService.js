@@ -451,8 +451,10 @@ function buildNicEInvoicePayload(invoiceData) {
   const discountInv = Math.round(toRupees(inv.discount || 0) * 100) / 100;
   const totInvVal = Math.round((totalAssVal + totalCgst + totalSgst + totalIgst - discountInv) * 100) / 100;
 
-  const sellerPin = extractPin(inv.company_address) || 201301;
-  const buyerPin = extractPin(inv.customer_address) || sellerPin;
+  const sellerPin = extractPin(inv.company_address);
+  if (!sellerPin) throw new Error("A valid 6-digit Pincode must be present in the user's Company Address.");
+  const buyerPin = extractPin(inv.customer_address);
+  if (!buyerPin) throw new Error("A valid 6-digit Pincode must be present in the Customer Address.");
 
   const sellerAddr = String(inv.company_address || 'Address');
   const buyerAddr = String(inv.customer_address || 'Address');
@@ -752,8 +754,11 @@ function buildNicEwayBillPayload(invoice, items, transportArgs) {
   const igstValue = Math.round(items.reduce((sum, i) => sum + toRupees(i.igst_amount || 0), 0) * 100) / 100;
   const discountInv = Math.round(toRupees(invoice.discount || 0) * 100) / 100;
   
-  const fromPincode = extractPinLoc(invoice.company_address) || 201301;
-  const toPincode = extractPinLoc(invoice.customer_address) || fromPincode;
+  const fromPincode = extractPinLoc(invoice.company_address);
+  if (!fromPincode) throw new Error("A valid 6-digit Pincode must be present in the user's Company Address.");
+  
+  const toPincode = extractPinLoc(invoice.customer_address);
+  if (!toPincode) throw new Error("A valid 6-digit Pincode must be present in the Customer Address.");
 
   const safeLocName = (addr) => {
       const parts = String(addr || '').split(',').map((p) => p.trim()).filter(Boolean);
