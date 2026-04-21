@@ -707,9 +707,26 @@ function buildEwbByIrnBody(irn, transportArgs, parties) {
 }
 
 function pickEwbGenFields(u) {
-  const no = u?.ewbNo ?? u?.EwbNo ?? u?.ewayBillNo;
-  const dtRaw = u?.EwbDt ?? u?.ewbDt ?? u?.ewayBillDate;
-  const tillRaw = u?.EwbValidTill ?? u?.ewbValidTill ?? u?.validUpto;
+  const candidates = [
+    u,
+    u?.Data,
+    u?.data,
+    u?.Result,
+    u?.result,
+    u?.Error,
+    u?.error,
+  ].filter((x) => x && typeof x === 'object');
+
+  let no = null;
+  let dtRaw = null;
+  let tillRaw = null;
+
+  for (const c of candidates) {
+    if (no == null) no = c?.ewbNo ?? c?.EwbNo ?? c?.ewayBillNo ?? c?.ewaybillNo ?? c?.EWayBillNo ?? null;
+    if (dtRaw == null) dtRaw = c?.EwbDt ?? c?.ewbDt ?? c?.ewayBillDate ?? c?.ewaybillDate ?? null;
+    if (tillRaw == null) tillRaw = c?.EwbValidTill ?? c?.ewbValidTill ?? c?.validUpto ?? c?.validUptoDate ?? null;
+  }
+
   const ewbDt = parseIndianDateTimeLoose(dtRaw) || new Date().toISOString();
   const validUpto = parseIndianDateTimeLoose(tillRaw);
   return {
