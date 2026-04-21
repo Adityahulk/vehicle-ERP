@@ -156,8 +156,28 @@ function logTaxProFailure(context, response, data) {
 
 function unwrapData(obj) {
   if (!obj || typeof obj !== 'object') return obj;
-  if (obj.Data != null && typeof obj.Data === 'object') return obj.Data;
-  if (obj.data != null && typeof obj.data === 'object') return obj.data;
+  if (obj.Data != null) {
+    if (typeof obj.Data === 'object') return obj.Data;
+    if (typeof obj.Data === 'string') {
+      try {
+        const parsed = JSON.parse(obj.Data);
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch {
+        /* keep outer object when Data is non-JSON string */
+      }
+    }
+  }
+  if (obj.data != null) {
+    if (typeof obj.data === 'object') return obj.data;
+    if (typeof obj.data === 'string') {
+      try {
+        const parsed = JSON.parse(obj.data);
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch {
+        /* keep outer object when data is non-JSON string */
+      }
+    }
+  }
   return obj;
 }
 
