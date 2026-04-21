@@ -687,7 +687,7 @@ function buildEwbByIrnBody(irn, transportArgs, parties) {
     TransMode: String(transportArgs.transport_mode || '1'),
     Distance: Number(transportArgs.distance_km) || 0,
     TransDocNo: String(transportArgs.trans_doc_no || '1').substring(0, 15),
-    TransDocDt: normalizeTransDocDate(transportArgs.trans_doc_dt),
+    TransDocDt: normalizeTransDocDate(transportArgs.trans_doc_dt || transportArgs.invoice_date),
     VehNo: vehNo.substring(0, 20),
     VehType: (transportArgs.vehicle_type || 'R').substring(0, 1).toUpperCase() === 'O' ? 'O' : 'R',
   };

@@ -381,7 +381,7 @@ router.post('/:id/ewaybill/generate', requireNotRole('ca'), requireMinRole('bran
     }
 
     const { rows: inv } = await query(
-      `SELECT i.id, i.irn, i.irn_status, i.eway_bill_no, COALESCE(i.seller_gstin, co.gstin) AS company_gstin,
+      `SELECT i.id, i.irn, i.irn_status, i.eway_bill_no, i.invoice_date, COALESCE(i.seller_gstin, co.gstin) AS company_gstin,
        COALESCE(i.seller_name, co.name) AS company_name, COALESCE(i.seller_address, co.address) AS company_address,
        COALESCE(i.bill_to_name, c.name) AS customer_name, COALESCE(i.bill_to_address, c.address) AS customer_address, COALESCE(i.bill_to_gstin, c.gstin) AS customer_gstin
        FROM invoices i
@@ -398,7 +398,7 @@ router.post('/:id/ewaybill/generate', requireNotRole('ca'), requireMinRole('bran
     const result = await taxPro.generateEwayBill(
       company_id,
       inv[0].irn,
-      transportArgs,
+      { ...transportArgs, invoice_date: inv[0].invoice_date },
       inv[0].company_gstin,
       {
         companyName: inv[0].company_name,
