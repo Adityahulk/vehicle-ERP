@@ -737,6 +737,9 @@ async function generateEwayBill(_companyId, irn, transportArgs, userGstin, parti
     dispatch,
     shipTo: shipTo && parties.customerAddress ? shipTo : null,
   });
+  console.info(
+    `[taxPro] ewb request dates: input_trans_doc_dt="${String(transportArgs.trans_doc_dt || '')}" normalized_trans_doc_dt="${String(body.TransDocDt || '')}" irn="${String(irn || '')}"`,
+  );
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const authtoken = await getEwbAuthToken(gstin);
