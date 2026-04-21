@@ -707,15 +707,32 @@ function buildEwbByIrnBody(irn, transportArgs, parties) {
 }
 
 function pickEwbGenFields(u) {
-  const candidates = [
-    u,
-    u?.Data,
-    u?.data,
-    u?.Result,
-    u?.result,
-    u?.Error,
-    u?.error,
-  ].filter((x) => x && typeof x === 'object');
+  const candidates = [];
+  const queue = [u];
+  const seen = new Set();
+
+  while (queue.length) {
+    const cur = queue.shift();
+    if (!cur) continue;
+    if (typeof cur === 'object') {
+      if (seen.has(cur)) continue;
+      seen.add(cur);
+      candidates.push(cur);
+      for (const v of Object.values(cur)) {
+        if (v && (typeof v === 'object' || typeof v === 'string')) queue.push(v);
+      }
+    } else if (typeof cur === 'string') {
+      const s = cur.trim();
+      if ((s.startsWith('{') && s.endsWith('}')) || (s.startsWith('[') && s.endsWith(']'))) {
+        try {
+          const parsed = JSON.parse(s);
+          if (parsed && typeof parsed === 'object') queue.push(parsed);
+        } catch {
+          /* ignore non-JSON strings */
+        }
+      }
+    }
+  }
 
   let no = null;
   let dtRaw = null;
@@ -922,11 +939,11 @@ async function generateEwayBill(_companyId, irn, transportArgs, userGstin, parti
 
     // Strategy 3: regex extraction from raw response text
     if (!ewbNo) {
-      const m = text.match(/["']?ewayBillNo["']?\s*[:=]\s*(\d+)/i);
+      const m = text.match(/\\?["']?ewayBillNo\\?["']?\s*[:=]\s*\\?["']?(\d+)/i);
       if (m) {
         ewbNo = m[1];
-        const dtMatch = text.match(/["']?ewayBillDate["']?\s*[:=]\s*["']([^"']+)["']/i);
-        const vuMatch = text.match(/["']?validUpto["']?\s*[:=]\s*["']([^"']+)["']/i);
+        const dtMatch = text.match(/\\?["']?ewayBillDate\\?["']?\s*[:=]\s*\\?["']([^"']+)\\?["']/i);
+        const vuMatch = text.match(/\\?["']?validUpto\\?["']?\s*[:=]\s*\\?["']([^"']+)\\?["']/i);
         ewbDt = (dtMatch ? parseIndianDateTimeLoose(dtMatch[1]) : null) || new Date().toISOString();
         validUpto = (vuMatch ? parseIndianDateTimeLoose(vuMatch[1]) : null) || ewbDt;
       }
