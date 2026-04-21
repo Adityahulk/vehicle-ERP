@@ -717,7 +717,90 @@ function pickEwbGenFields(u) {
   };
 }
 
-async function generateEwayBill(_companyId, irn, transportArgs, userGstin, parties = {}) {
+function buildNicEwayBillPayload(invoice, items, transportArgs) {
+  const sellerStateCode = (invoice.company_gstin && invoice.company_gstin.length >= 2) ? parseInt(invoice.company_gstin.substring(0, 2), 10) : 0;
+  const rawBuyerGstin = (invoice.customer_gstin && invoice.customer_gstin.trim()) ? invoice.customer_gstin.trim() : 'URP';
+  const buyerStateCode = (rawBuyerGstin !== 'URP' && rawBuyerGstin.length >= 2) ? parseInt(rawBuyerGstin.substring(0, 2), 10) : sellerStateCode;
+
+  const extractPinLoc = (address) => {
+      const match = String(address || '').match(/\b(\d{6})\b/);
+      return match ? parseInt(match[1], 10) : 0;
+  };
+
+  const itemList = items.map((item, idx) => {
+    const unitPrice = toRupees(item.unit_price);
+    const qty = Number(item.quantity) || 1;
+    const taxableAmount = Math.round(unitPrice * qty * 100) / 100;
+    return {
+      productName: (item.description || "Item").substring(0, 100),
+      productDesc: (item.description || "Item").substring(0, 100),
+      hsnCode: parseInt(String(item.hsn_code || '').replace(/\D/g, '').substring(0, 8) || '8703', 10),
+      quantity: qty,
+      qtyUnit: "NOS",
+      cgstRate: Number(item.cgst_rate || 0),
+      sgstRate: Number(item.sgst_rate || 0),
+      igstRate: Number(item.igst_rate || 0),
+      cessRate: 0,
+      cessNonadvol: 0,
+      taxableAmount: taxableAmount
+    };
+  });
+
+  const totalValue = itemList.reduce((sum, item) => sum + item.taxableAmount, 0);
+  const cgstValue = Math.round(items.reduce((sum, i) => sum + toRupees(i.cgst_amount || 0), 0) * 100) / 100;
+  const sgstValue = Math.round(items.reduce((sum, i) => sum + toRupees(i.sgst_amount || 0), 0) * 100) / 100;
+  const igstValue = Math.round(items.reduce((sum, i) => sum + toRupees(i.igst_amount || 0), 0) * 100) / 100;
+  const discountInv = Math.round(toRupees(invoice.discount || 0) * 100) / 100;
+  
+  const fromPincode = extractPinLoc(invoice.company_address) || 0;
+  const toPincode = extractPinLoc(invoice.customer_address) || 0;
+
+  const safeLocName = (addr) => {
+      const parts = String(addr || '').split(',').map((p) => p.trim()).filter(Boolean);
+      const last = parts[parts.length - 1] || '';
+      const loc = last.replace(/\b\d{6}\b/, '').trim();
+      return (loc.length >= 3 ? loc : "City").substring(0, 50);
+  };
+
+  return {
+    supplyType: "O",
+    subSupplyType: "1",
+    docType: "INV",
+    docNo: String(invoice.invoice_number || "INV").substring(0, 15),
+    docDate: normalizeTransDocDate(transportArgs.invoice_date || invoice.invoice_date).replace(/\-/g, '/'),
+    fromGstin: invoice.company_gstin,
+    fromTrdName: (invoice.company_name || "Seller").substring(0, 100),
+    fromAddr1: String(invoice.company_address || "Address").substring(0, 100),
+    fromPlace: safeLocName(invoice.company_address),
+    fromPincode: fromPincode,
+    actFromStateCode: sellerStateCode,
+    fromStateCode: sellerStateCode,
+    toGstin: rawBuyerGstin,
+    toTrdName: (invoice.customer_name || "Buyer").substring(0, 100),
+    toAddr1: String(invoice.customer_address || "Address").substring(0, 100),
+    toPlace: safeLocName(invoice.customer_address),
+    toPincode: toPincode,
+    actToStateCode: buyerStateCode,
+    toStateCode: buyerStateCode,
+    transactionType: 1, // 1 is Regular
+    totalValue: totalValue,
+    cgstValue: cgstValue,
+    sgstValue: sgstValue,
+    igstValue: igstValue,
+    cessValue: 0,
+    cessNonAdvolValue: 0,
+    totInvValue: Math.round((totalValue + cgstValue + sgstValue + igstValue - discountInv) * 100) / 100,
+    transMode: String(transportArgs.transport_mode || '1'),
+    transDistance: String(transportArgs.distance_km || '0'),
+    vehicleNo: String(transportArgs.vehicle_no || '').replace(/\s/g, '').toUpperCase().substring(0, 20),
+    vehicleType: (transportArgs.vehicle_type || 'R').substring(0, 1).toUpperCase() === 'O' ? 'O' : 'R',
+    transporterId: String(transportArgs.transporter_id || '').trim().toUpperCase() || "",
+    transporterName: String(transportArgs.transporter_name || '').trim().substring(0, 100) || "",
+    itemList: itemList
+  };
+}
+
+async function generateEwayBill(_companyId, irn, transportArgs, userGstin, parties = {}, fullInvoiceData = null) {
   if (!irn) throw new Error('IRN is required to generate E-Way Bill');
   const gstin = normalizeGstin(userGstin);
   if (!gstin) throw new Error('Company GSTIN is required for e-way bill');
@@ -736,12 +819,19 @@ async function generateEwayBill(_companyId, irn, transportArgs, userGstin, parti
     )
     : null;
 
-  const body = buildEwbByIrnBody(irn, transportArgs, {
-    dispatch,
-    shipTo: shipTo && parties.customerAddress ? shipTo : null,
-  });
+  let body;
+  if (fullInvoiceData && fullInvoiceData.items && fullInvoiceData.items.length > 0) {
+    body = buildNicEwayBillPayload(fullInvoiceData, fullInvoiceData.items, transportArgs);
+    // Explicitly do not send Irn in the body here, the full EWayBill API (GENEWAYBILL) expects docDate etc.
+  } else {
+    body = buildEwbByIrnBody(irn, transportArgs, {
+      dispatch,
+      shipTo: shipTo && parties.customerAddress ? shipTo : null,
+    });
+  }
+
   console.info(
-    `[taxPro] ewb request dates: input_trans_doc_dt="${String(transportArgs.trans_doc_dt || '')}" normalized_trans_doc_dt="${String(body.TransDocDt || '')}" irn="${String(irn || '')}"`,
+    `[taxPro] ewb request dates: input_trans_doc_dt="${String(transportArgs.trans_doc_dt || '')}" normalized_trans_doc_dt="${String(body.TransDocDt || body.docDate || '')}" irn="${String(irn || '')}"`,
   );
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -756,11 +846,10 @@ async function generateEwayBill(_companyId, irn, transportArgs, userGstin, parti
     const url = `${joinHostAndPath(c.host, c.ewbApiPath)}?${q.toString()}`;
     console.info(
       `[taxPro] ewb request meta: host="${c.host}" path="${c.ewbApiPath}" action="${c.ewbGenAction}" gstin="${gstin}" body=${JSON.stringify({
-        Irn: body.Irn,
-        TransDocNo: body.TransDocNo,
-        TransDocDt: body.TransDocDt,
-        TransMode: body.TransMode,
-        Distance: body.Distance,
+        docNo: body.docNo || body.TransDocNo,
+        docDate: body.docDate || body.TransDocDt,
+        transMode: body.TransMode || body.transMode,
+        distance: body.Distance || body.transDistance,
       })}`,
     );
 

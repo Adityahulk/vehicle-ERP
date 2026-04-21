@@ -381,12 +381,29 @@ router.post('/:id/ewaybill/generate', requireNotRole('ca'), requireMinRole('bran
     }
 
     const { rows: inv } = await query(
-      `SELECT i.id, i.irn, i.irn_status, i.eway_bill_no, i.invoice_date, i.ack_date, COALESCE(i.seller_gstin, co.gstin) AS company_gstin,
+      `SELECT i.id, i.irn, i.irn_status, i.eway_bill_no, i.invoice_date, i.ack_date, i.invoice_number, i.discount, COALESCE(i.seller_gstin, co.gstin) AS company_gstin,
        COALESCE(i.seller_name, co.name) AS company_name, COALESCE(i.seller_address, co.address) AS company_address,
-       COALESCE(i.bill_to_name, c.name) AS customer_name, COALESCE(i.bill_to_address, c.address) AS customer_address, COALESCE(i.bill_to_gstin, c.gstin) AS customer_gstin
+       COALESCE(i.bill_to_name, c.name) AS customer_name, COALESCE(i.bill_to_address, c.address) AS customer_address, COALESCE(i.bill_to_gstin, c.gstin) AS customer_gstin,
+       agg.items
        FROM invoices i
        INNER JOIN companies co ON co.id = i.company_id AND co.is_deleted = FALSE
        INNER JOIN customers c ON c.id = i.customer_id AND c.company_id = i.company_id AND c.is_deleted = FALSE
+       LEFT JOIN LATERAL (
+         SELECT json_agg(json_build_object(
+           'description', ii.description,
+           'hsn_code', ii.hsn_code,
+           'quantity', ii.quantity,
+           'unit_price', ii.unit_price,
+           'cgst_rate', ii.cgst_rate,
+           'sgst_rate', ii.sgst_rate,
+           'igst_rate', ii.igst_rate,
+           'cgst_amount', ii.cgst_amount,
+           'sgst_amount', ii.sgst_amount,
+           'igst_amount', ii.igst_amount
+         ) ORDER BY ii.created_at) AS items
+         FROM invoice_items ii
+         WHERE ii.invoice_id = i.id AND ii.is_deleted = FALSE
+       ) agg ON TRUE
        WHERE i.id = $1 AND i.company_id = $2 AND i.is_deleted = FALSE`,
       [invoiceId, company_id],
     );
@@ -407,6 +424,7 @@ router.post('/:id/ewaybill/generate', requireNotRole('ca'), requireMinRole('bran
         customerAddress: inv[0].customer_address,
         customerGstin: inv[0].customer_gstin,
       },
+      inv[0]
     );
 
     await query(
