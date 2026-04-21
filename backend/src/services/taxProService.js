@@ -754,6 +754,15 @@ async function generateEwayBill(_companyId, irn, transportArgs, userGstin, parti
       authtoken,
     });
     const url = `${joinHostAndPath(c.host, c.ewbApiPath)}?${q.toString()}`;
+    console.info(
+      `[taxPro] ewb request meta: host="${c.host}" path="${c.ewbApiPath}" action="${c.ewbGenAction}" gstin="${gstin}" body=${JSON.stringify({
+        Irn: body.Irn,
+        TransDocNo: body.TransDocNo,
+        TransDocDt: body.TransDocDt,
+        TransMode: body.TransMode,
+        Distance: body.Distance,
+      })}`,
+    );
 
     const response = await fetch(url, {
       method: 'POST',
