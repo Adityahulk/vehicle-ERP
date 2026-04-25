@@ -19,7 +19,7 @@ const DEFAULT_LAYOUT = {
   seller_phone_override: '',
   seller_email_override: '',
   seller_gstin_override: '',
-  /** company_upload | mvg_group — same file as website /assets/mvg-logo.png, bundled for PDFs */
+  /** company_upload | mvg_group — same file as website /assets/app-logo.svg, bundled for PDFs */
   logo_asset: 'company_upload',
   /** company_upload | rudra_proprietor | mavidya_director — preset PNGs in assets/invoice-signatures */
   signature_asset: 'company_upload',

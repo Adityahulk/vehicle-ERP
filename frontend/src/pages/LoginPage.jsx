@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import api from '@/lib/api';
 import useAuthStore from '@/store/authStore';
+import { APP_LOGO_ALT, APP_LOGO_SRC } from '@/config/branding';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -42,9 +43,9 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <img
-            src="/assets/mvg-logo.png"
-            alt="Mavidya Group"
-            className="h-24 mx-auto mb-4 object-contain"
+            src={APP_LOGO_SRC}
+            alt={APP_LOGO_ALT}
+            className="h-28 w-auto max-w-[min(100%,20rem)] mx-auto mb-4 object-contain"
           />
           <p className="text-zinc-400 text-sm">Vehicle Distribution ERP</p>
         </div>

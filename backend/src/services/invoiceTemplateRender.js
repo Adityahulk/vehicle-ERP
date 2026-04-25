@@ -9,9 +9,9 @@ const UPLOADS_ROOT = path.join(__dirname, '..', '..', 'uploads');
 const PRESET_SIGN_DIR = path.join(__dirname, '..', '..', 'assets', 'invoice-signatures');
 const PRESET_LOGO_DIR = path.join(__dirname, '..', '..', 'assets', 'invoice-logos');
 
-/** Same branding as frontend public/assets/mvg-logo.png (copied into backend for server-side PDF). */
+/** Same branding as frontend `public/assets/app-logo.svg` (copy under `assets/invoice-logos/` for server-side PDF). */
 const LOGO_PRESET_FILES = {
-  mvg_group: 'mvg-group-clean.png',
+  mvg_group: 'mvg-group-clean.svg',
 };
 
 /** Built-in signature scans (Rudra Green Legender — Proprietor; Mavidya — Director). */

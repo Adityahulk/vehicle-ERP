@@ -408,7 +408,7 @@ export default function InvoiceTemplates() {
                         onChange={(e) => setLayoutForm((p) => ({ ...p, logo_asset: e.target.value }))}
                       >
                         <option value="company_upload">Company upload (file above)</option>
-                        <option value="mvg_group">MVG group (same as website /assets/mvg-logo.png)</option>
+                        <option value="mvg_group">Default app logo (same as website header /assets/app-logo.svg)</option>
                       </Select>
                     </div>
                   </div>

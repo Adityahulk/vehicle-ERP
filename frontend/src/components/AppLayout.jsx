@@ -7,6 +7,7 @@ import { Car, LogOut, Search, X, Loader2, Menu, ChevronDown } from 'lucide-react
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import { navItemsForRole, splitNavForDesktopBar } from '@/config/navConfig';
+import { APP_LOGO_ALT, APP_LOGO_SRC } from '@/config/branding';
 
 function DesktopNavMore({ items }) {
   const [open, setOpen] = useState(false);
@@ -233,7 +234,7 @@ function MobileDrawer({ open, onClose, user, onLogout }) {
       <div className="fixed inset-y-0 left-0 z-50 w-72 bg-card border-r border-border shadow-xl flex flex-col animate-in slide-in-from-left duration-200">
         <div className="flex items-center justify-between px-4 py-4 border-b border-border">
           <div className="flex items-center gap-2">
-            <img src="/assets/mvg-logo.png" alt="MVG" className="h-8 object-contain" />
+            <img src={APP_LOGO_SRC} alt={APP_LOGO_ALT} className="h-8 w-auto max-w-[10rem] object-contain object-left" />
             <span className="text-lg font-bold">MVG ERP</span>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>
@@ -310,7 +311,7 @@ export default function AppLayout({ children }) {
             <Menu className="h-5 w-5" />
           </Button>
           <div className="flex items-center gap-2 shrink-0">
-            <img src="/assets/mvg-logo.png" alt="MVG" className="h-8 object-contain" />
+            <img src={APP_LOGO_SRC} alt={APP_LOGO_ALT} className="h-8 w-auto max-w-[10rem] object-contain object-left" />
             <span className="text-lg font-bold hidden sm:inline">MVG ERP</span>
           </div>
           <nav
