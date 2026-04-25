@@ -40,6 +40,11 @@ function mergeLayout(templateRow) {
   const raw = templateRow?.layout_config;
   const cfg = typeof raw === 'object' && raw && !Array.isArray(raw) ? raw : {};
   const merged = { ...DEFAULT_LAYOUT, ...cfg };
+  const pc = String(merged.primary_color || '').trim();
+  const pcLo = pc.toLowerCase();
+  if (!pc || pcLo === '#000' || pcLo === '#000000') {
+    merged.primary_color = DEFAULT_LAYOUT.primary_color;
+  }
   if (typeof merged.bank_details === 'string') {
     merged.bank_details = merged.bank_details
       .replace(/\r\n/g, '\n')
@@ -314,7 +319,7 @@ function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
   const companyId = invN.company_id;
   const { logo, signature } = resolveLogoSignatureDataUri(companyId, invN, L);
   const hasIgst = items.some((i) => Number(i.igst_amount) > 0);
-  const barColor = L.primary_color && String(L.primary_color).trim() ? String(L.primary_color).trim() : '#000000';
+  const barColor = String(L.primary_color || DEFAULT_LAYOUT.primary_color).trim();
   const logoBlock = logo
     ? `<img src="${logo}" alt=" " />`
     : '<span style="display:inline-block;min-height:56px">&#160;</span>';
