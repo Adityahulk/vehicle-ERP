@@ -321,7 +321,8 @@ function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
   const hasIgst = items.some((i) => Number(i.igst_amount) > 0);
   const barColor = String(L.primary_color || DEFAULT_LAYOUT.primary_color).trim();
   const logoBlock = logo
-    ? `<img src="${logo}" alt=" " />`
+    ? `<img src="${logo}" alt=" " />
+       <div style="margin-top:4px;font-size:12px;font-weight:700;letter-spacing:0.02em;color:#111;">MICROTECHNIQUE IT</div>`
     : '<span style="display:inline-block;min-height:56px">&#160;</span>';
 
   const emailSuffix = L.show_company_email === true && invN.company_email
@@ -578,6 +579,9 @@ function buildStandardInvoiceHtml({ invoice: inv, items }, templateRow) {
   const logoBlock = logo
     ? `<div style="width:220px;height:64px;overflow:hidden;margin-bottom:8px;background:#f8fafc;border-radius:4px;padding:4px;">
          <img src="${logo}" alt="Logo" style="width:100%;height:100%;display:block;object-fit:cover;object-position:left center;filter:contrast(1.08) saturate(1.12);" />
+       </div>
+       <div style="margin-top:2px;margin-bottom:8px;font-size:13px;font-weight:700;letter-spacing:0.02em;color:#111;">
+         MICROTECHNIQUE IT
        </div>`
     : '';
 

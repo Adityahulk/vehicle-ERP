@@ -7,7 +7,7 @@ import { Car, LogOut, Search, X, Loader2, Menu, ChevronDown } from 'lucide-react
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import { navItemsForRole, splitNavForDesktopBar } from '@/config/navConfig';
-import { APP_LOGO_ALT, APP_LOGO_SRC } from '@/config/branding';
+import { APP_BRAND_NAME, APP_LOGO_ALT, APP_LOGO_SRC } from '@/config/branding';
 
 function DesktopNavMore({ items }) {
   const [open, setOpen] = useState(false);
@@ -237,7 +237,6 @@ function MobileDrawer({ open, onClose, user, onLogout }) {
             <div className="h-10 sm:h-11 w-32 sm:w-40 overflow-hidden shrink-0">
               <img src={APP_LOGO_SRC} alt={APP_LOGO_ALT} className="h-full w-full object-cover object-left" />
             </div>
-            <span className="text-lg font-bold">MVG ERP</span>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="h-5 w-5" />
@@ -316,7 +315,6 @@ export default function AppLayout({ children }) {
             <div className="h-10 sm:h-11 w-32 sm:w-40 overflow-hidden shrink-0">
               <img src={APP_LOGO_SRC} alt={APP_LOGO_ALT} className="h-full w-full object-cover object-left" />
             </div>
-            <span className="text-lg font-bold hidden sm:inline">MVG ERP</span>
           </div>
           <nav
             className="hidden md:flex items-center gap-1 min-w-0 flex-1"
@@ -327,6 +325,7 @@ export default function AppLayout({ children }) {
               return (
                 <>
                   <div className="flex items-center gap-0.5 flex-nowrap min-w-0 flex-1 overflow-x-auto overflow-y-visible py-1 -my-1 [scrollbar-width:thin]">
+                    <span className="text-sm font-semibold text-foreground/85 whitespace-nowrap px-2 shrink-0">{APP_BRAND_NAME}</span>
                     {primary.map(({ to, label, icon }) => (
                       <NavLink
                         key={`${to}-${label}`}
