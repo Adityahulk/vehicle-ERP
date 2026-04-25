@@ -7,7 +7,7 @@ import { Car, LogOut, Search, X, Loader2, Menu, ChevronDown } from 'lucide-react
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import { navItemsForRole, splitNavForDesktopBar } from '@/config/navConfig';
-import { APP_LOGO_ALT, APP_LOGO_SRC } from '@/config/branding';
+import { APP_BRAND_NAME, APP_LOGO_ALT, APP_NAV_LOGO_SRC } from '@/config/branding';
 
 function DesktopNavMore({ items }) {
   const [open, setOpen] = useState(false);
@@ -234,9 +234,10 @@ function MobileDrawer({ open, onClose, user, onLogout }) {
       <div className="fixed inset-y-0 left-0 z-50 w-72 bg-card border-r border-border shadow-xl flex flex-col animate-in slide-in-from-left duration-200">
         <div className="flex items-center justify-between px-4 py-4 border-b border-border">
           <div className="flex items-center gap-2">
-            <div className="h-9 sm:h-10 w-40 sm:w-44 shrink-0">
-              <img src={APP_LOGO_SRC} alt={APP_LOGO_ALT} className="h-full w-full object-contain object-left" />
+            <div className="h-9 w-9 sm:h-10 sm:w-10 shrink-0">
+              <img src={APP_NAV_LOGO_SRC} alt={APP_LOGO_ALT} className="h-full w-full object-contain" />
             </div>
+            <span className="text-sm font-semibold tracking-wide text-foreground">{APP_BRAND_NAME}</span>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="h-5 w-5" />
@@ -312,9 +313,10 @@ export default function AppLayout({ children }) {
             <Menu className="h-5 w-5" />
           </Button>
           <div className="flex items-center gap-2 shrink-0">
-            <div className="h-9 sm:h-10 w-40 sm:w-44 shrink-0">
-              <img src={APP_LOGO_SRC} alt={APP_LOGO_ALT} className="h-full w-full object-contain object-left" />
+            <div className="h-9 w-9 sm:h-10 sm:w-10 shrink-0">
+              <img src={APP_NAV_LOGO_SRC} alt={APP_LOGO_ALT} className="h-full w-full object-contain" />
             </div>
+            <span className="text-sm font-semibold tracking-wide text-foreground hidden sm:inline">{APP_BRAND_NAME}</span>
           </div>
           <nav
             className="hidden md:flex items-center gap-1 min-w-0 flex-1"
