@@ -17,10 +17,19 @@
   .b0 { border:1px solid #000; }
   .header-ribbon { font-size:9px; font-weight:700; text-align:right; padding:4px 6px; vertical-align:top; width:14%; }
   .logo-cell {
-    width:128px; min-width:128px; background:#ffffff; text-align:center; vertical-align:middle;
-    padding:8px 6px;
+    width:152px; min-width:152px; background:#f8fafc; text-align:center; vertical-align:middle;
+    padding:6px;
+    overflow:hidden;
   }
-  .logo-cell img { max-height:88px; max-width:118px; display:block; margin:0 auto; object-fit:contain; }
+  .logo-cell img {
+    width:100%;
+    height:90px;
+    display:block;
+    margin:0 auto;
+    object-fit:cover;
+    object-position:center;
+    filter:contrast(1.08) saturate(1.12);
+  }
   .co-block { text-align:center; padding:8px 10px 10px; }
   .co-name { font-size:13px; font-weight:700; text-transform:uppercase; line-height:1.2; margin-bottom:6px; }
   .co-addr { font-size:9px; line-height:1.35; margin-bottom:6px; }
