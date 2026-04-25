@@ -7,7 +7,7 @@ import { Car, LogOut, Search, X, Loader2, Menu, ChevronDown } from 'lucide-react
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import { navItemsForRole, splitNavForDesktopBar } from '@/config/navConfig';
-import { APP_BRAND_NAME, APP_LOGO_ALT, APP_LOGO_SRC } from '@/config/branding';
+import { APP_LOGO_ALT, APP_LOGO_SRC } from '@/config/branding';
 
 function DesktopNavMore({ items }) {
   const [open, setOpen] = useState(false);
@@ -234,8 +234,8 @@ function MobileDrawer({ open, onClose, user, onLogout }) {
       <div className="fixed inset-y-0 left-0 z-50 w-72 bg-card border-r border-border shadow-xl flex flex-col animate-in slide-in-from-left duration-200">
         <div className="flex items-center justify-between px-4 py-4 border-b border-border">
           <div className="flex items-center gap-2">
-            <div className="h-10 w-10 sm:h-11 sm:w-11 shrink-0">
-              <img src={APP_LOGO_SRC} alt={APP_LOGO_ALT} className="h-full w-full object-contain" />
+            <div className="h-9 sm:h-10 w-40 sm:w-44 shrink-0">
+              <img src={APP_LOGO_SRC} alt={APP_LOGO_ALT} className="h-full w-full object-contain object-left" />
             </div>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>
@@ -312,8 +312,8 @@ export default function AppLayout({ children }) {
             <Menu className="h-5 w-5" />
           </Button>
           <div className="flex items-center gap-2 shrink-0">
-            <div className="h-10 w-10 sm:h-11 sm:w-11 shrink-0">
-              <img src={APP_LOGO_SRC} alt={APP_LOGO_ALT} className="h-full w-full object-contain" />
+            <div className="h-9 sm:h-10 w-40 sm:w-44 shrink-0">
+              <img src={APP_LOGO_SRC} alt={APP_LOGO_ALT} className="h-full w-full object-contain object-left" />
             </div>
           </div>
           <nav
@@ -325,7 +325,6 @@ export default function AppLayout({ children }) {
               return (
                 <>
                   <div className="flex items-center gap-0.5 flex-nowrap min-w-0 flex-1 overflow-x-auto overflow-y-visible py-1 -my-1 [scrollbar-width:thin]">
-                    <span className="text-sm font-semibold text-foreground/85 whitespace-nowrap px-2 shrink-0">{APP_BRAND_NAME}</span>
                     {primary.map(({ to, label, icon }) => (
                       <NavLink
                         key={`${to}-${label}`}

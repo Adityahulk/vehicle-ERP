@@ -9,9 +9,9 @@ const UPLOADS_ROOT = path.join(__dirname, '..', '..', 'uploads');
 const PRESET_SIGN_DIR = path.join(__dirname, '..', '..', 'assets', 'invoice-signatures');
 const PRESET_LOGO_DIR = path.join(__dirname, '..', '..', 'assets', 'invoice-logos');
 
-/** Same branding as frontend `public/assets/app-logo.svg` (copy under `assets/invoice-logos/` for server-side PDF). */
+/** Preset branding for server-side invoice PDF rendering. */
 const LOGO_PRESET_FILES = {
-  mvg_group: 'mvg-group-clean.svg',
+  mvg_group: 'mvg-group-clean.png',
 };
 
 /** Built-in signature scans (Rudra Green Legender — Proprietor; Mavidya — Director). */
@@ -321,8 +321,7 @@ function buildTradeInvoiceHtml({ invoice: inv, items }, templateRow) {
   const hasIgst = items.some((i) => Number(i.igst_amount) > 0);
   const barColor = String(L.primary_color || DEFAULT_LAYOUT.primary_color).trim();
   const logoBlock = logo
-    ? `<img src="${logo}" alt=" " />
-       <div style="margin-top:4px;font-size:12px;font-weight:700;letter-spacing:0.02em;color:#111;">MICROTECHNIQUE IT</div>`
+    ? `<img src="${logo}" alt=" " />`
     : '<span style="display:inline-block;min-height:56px">&#160;</span>';
 
   const emailSuffix = L.show_company_email === true && invN.company_email
@@ -577,11 +576,8 @@ function buildStandardInvoiceHtml({ invoice: inv, items }, templateRow) {
   const font = L.font === 'serif' ? "Georgia, 'Times New Roman', serif" : "'Segoe UI', system-ui, sans-serif";
 
   const logoBlock = logo
-    ? `<div style="width:220px;height:64px;overflow:hidden;margin-bottom:8px;background:#f8fafc;border-radius:4px;padding:4px;">
-         <img src="${logo}" alt="Logo" style="width:100%;height:100%;display:block;object-fit:cover;object-position:left center;filter:contrast(1.08) saturate(1.12);" />
-       </div>
-       <div style="margin-top:2px;margin-bottom:8px;font-size:13px;font-weight:700;letter-spacing:0.02em;color:#111;">
-         MICROTECHNIQUE IT
+    ? `<div style="width:220px;height:120px;overflow:hidden;margin-bottom:8px;background:#f8fafc;border-radius:4px;padding:4px;">
+         <img src="${logo}" alt="Logo" style="width:100%;height:100%;display:block;object-fit:contain;object-position:center;" />
        </div>`
     : '';
 
