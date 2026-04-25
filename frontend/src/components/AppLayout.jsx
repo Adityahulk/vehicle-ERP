@@ -234,8 +234,8 @@ function MobileDrawer({ open, onClose, user, onLogout }) {
       <div className="fixed inset-y-0 left-0 z-50 w-72 bg-card border-r border-border shadow-xl flex flex-col animate-in slide-in-from-left duration-200">
         <div className="flex items-center justify-between px-4 py-4 border-b border-border">
           <div className="flex items-center gap-2">
-            <div className="h-10 sm:h-11 w-32 sm:w-40 overflow-hidden shrink-0">
-              <img src={APP_LOGO_SRC} alt={APP_LOGO_ALT} className="h-full w-full object-cover object-left" />
+            <div className="h-10 w-10 sm:h-11 sm:w-11 shrink-0">
+              <img src={APP_LOGO_SRC} alt={APP_LOGO_ALT} className="h-full w-full object-contain" />
             </div>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>
@@ -312,8 +312,8 @@ export default function AppLayout({ children }) {
             <Menu className="h-5 w-5" />
           </Button>
           <div className="flex items-center gap-2 shrink-0">
-            <div className="h-10 sm:h-11 w-32 sm:w-40 overflow-hidden shrink-0">
-              <img src={APP_LOGO_SRC} alt={APP_LOGO_ALT} className="h-full w-full object-cover object-left" />
+            <div className="h-10 w-10 sm:h-11 sm:w-11 shrink-0">
+              <img src={APP_LOGO_SRC} alt={APP_LOGO_ALT} className="h-full w-full object-contain" />
             </div>
           </div>
           <nav
