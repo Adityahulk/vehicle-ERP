@@ -576,8 +576,8 @@ function buildStandardInvoiceHtml({ invoice: inv, items }, templateRow) {
   const font = L.font === 'serif' ? "Georgia, 'Times New Roman', serif" : "'Segoe UI', system-ui, sans-serif";
 
   const logoBlock = logo
-    ? `<div style="width:240px;height:140px;overflow:hidden;margin-bottom:8px;background:#f8fafc;border-radius:4px;padding:6px;">
-         <img src="${logo}" alt="Logo" style="width:100%;height:100%;display:block;object-fit:contain;object-position:center;" />
+    ? `<div style="width:240px;max-height:160px;overflow:visible;margin-bottom:8px;background:#ffffff;border:1px solid #e5e7eb;border-radius:4px;padding:8px;">
+         <img src="${logo}" alt="Logo" style="width:100%;max-height:150px;height:auto;display:block;object-fit:contain;object-position:center top;" />
        </div>`
     : '';
 
