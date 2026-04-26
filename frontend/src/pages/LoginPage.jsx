@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import api from '@/lib/api';
 import useAuthStore from '@/store/authStore';
-import { APP_LOGO_ALT, APP_LOGO_SRC } from '@/config/branding';
+import { APP_LOGO_ALT, APP_LOGIN_LOGO_SRC } from '@/config/branding';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -39,15 +39,15 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-muted px-4 py-10">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <img
-            src={APP_LOGO_SRC}
+            src={APP_LOGIN_LOGO_SRC}
             alt={APP_LOGO_ALT}
-            className="h-28 w-auto max-w-[min(100%,20rem)] mx-auto mb-4 object-contain"
+            className="h-auto w-full max-w-[min(100%,22rem)] mx-auto object-contain"
           />
-          <p className="text-zinc-400 text-sm">Vehicle Distribution ERP</p>
+          <p className="text-muted-foreground text-sm mt-4">Vehicle Distribution ERP</p>
         </div>
 
         <Card>

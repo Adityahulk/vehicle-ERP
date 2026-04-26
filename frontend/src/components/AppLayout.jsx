@@ -234,8 +234,14 @@ function MobileDrawer({ open, onClose, user, onLogout }) {
       <div className="fixed inset-y-0 left-0 z-50 w-72 bg-card border-r border-border shadow-xl flex flex-col animate-in slide-in-from-left duration-200">
         <div className="flex items-center justify-between px-4 py-4 border-b border-border">
           <div className="flex items-center gap-2">
-            <div className="h-10 w-10 sm:h-11 sm:w-11 shrink-0">
-              <img src={APP_NAV_LOGO_SRC} alt={APP_LOGO_ALT} className="h-full w-full object-contain" />
+            <div className="h-11 w-[3.25rem] sm:h-12 sm:w-14 shrink-0 rounded-md bg-muted/90 ring-1 ring-border/60 flex items-center justify-center p-0.5">
+              <img
+                src={APP_NAV_LOGO_SRC}
+                alt={APP_LOGO_ALT}
+                className="max-h-full max-w-full h-full w-auto object-contain"
+                decoding="async"
+                fetchPriority="high"
+              />
             </div>
             <span className="text-sm font-semibold tracking-wide text-foreground">{APP_BRAND_NAME}</span>
           </div>
@@ -313,8 +319,14 @@ export default function AppLayout({ children }) {
             <Menu className="h-5 w-5" />
           </Button>
           <div className="flex items-center gap-2 shrink-0">
-            <div className="h-10 w-10 sm:h-11 sm:w-11 shrink-0">
-              <img src={APP_NAV_LOGO_SRC} alt={APP_LOGO_ALT} className="h-full w-full object-contain" />
+            <div className="h-11 w-[3.25rem] sm:h-12 sm:w-14 shrink-0 rounded-md bg-muted/90 ring-1 ring-border/60 flex items-center justify-center p-0.5">
+              <img
+                src={APP_NAV_LOGO_SRC}
+                alt={APP_LOGO_ALT}
+                className="max-h-full max-w-full h-full w-auto object-contain"
+                decoding="async"
+                fetchPriority="high"
+              />
             </div>
             <span className="text-sm font-semibold tracking-wide text-foreground hidden sm:inline">{APP_BRAND_NAME}</span>
           </div>
