@@ -47,7 +47,6 @@ export default function LoginPage() {
             alt={APP_LOGO_ALT}
             className="h-auto w-full max-w-[min(100%,22rem)] mx-auto object-contain"
           />
-          <p className="text-muted-foreground text-sm mt-4">Vehicle Distribution ERP</p>
         </div>
 
         <Card>
