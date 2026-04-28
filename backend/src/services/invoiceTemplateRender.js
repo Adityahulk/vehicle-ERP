@@ -165,7 +165,10 @@ function resolveLogoDataUri(companyId, invoice, layout) {
     if (fs.existsSync(presetPath)) return fileToDataUri(presetPath);
   }
   const p = tryLegacyUploadUrl(invoice.logo_url) || findCompanyAsset(companyId, 'logo');
-  return p ? fileToDataUri(p) : '';
+  if (p) return fileToDataUri(p);
+  // No company upload — fall back to default brand logo
+  const defaultPreset = path.join(PRESET_LOGO_DIR, LOGO_PRESET_FILES.mvg_group);
+  return fs.existsSync(defaultPreset) ? fileToDataUri(defaultPreset) : '';
 }
 
 function resolveSignatureDataUri(companyId, invoice, layout) {

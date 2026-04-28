@@ -248,7 +248,8 @@ export default function InvoiceTemplates() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['company'] });
-      toast.success('Logo uploaded');
+      setLayoutForm((p) => ({ ...p, logo_asset: 'company_upload' }));
+      toast.success('Logo uploaded — click Save to apply to this template');
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Upload failed'),
   });
@@ -408,7 +409,7 @@ export default function InvoiceTemplates() {
                         onChange={(e) => setLayoutForm((p) => ({ ...p, logo_asset: e.target.value }))}
                       >
                         <option value="company_upload">Company upload (file above)</option>
-                        <option value="mvg_group">Default app logo (same as website header /assets/app-logo.svg)</option>
+                        <option value="mvg_group">Default brand logo — Mavidya Group / Pradeep Guru Company</option>
                       </Select>
                     </div>
                   </div>
