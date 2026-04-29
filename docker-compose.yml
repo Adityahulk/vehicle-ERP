@@ -69,8 +69,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY:-15m}
       JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-7d}
-      CORS_ORIGIN: ${CORS_ORIGIN:-https://microtechnique.in}
-      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://microtechnique.in}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://mavidyagroup.in}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://mavidyagroup.in}
       UPLOAD_DIR: ./uploads
       MAX_FILE_SIZE: ${MAX_FILE_SIZE:-5242880}
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
@@ -104,7 +104,7 @@ services:
         ipv4_address: 172.29.44.12
 
   # Default: HTTP only — nginx crashes if nginx.conf + /etc/letsencrypt are used before certs exist.
-  # After: sudo ls /etc/letsencrypt/live/microtechnique.in/ — replace this `nginx` block with nginx/HTTPS-COMPOSE-SNIPPET.yml
+  # After: sudo ls /etc/letsencrypt/live/mavidyagroup.in/ — replace this `nginx` block with nginx/HTTPS-COMPOSE-SNIPPET.yml
   nginx:
     image: nginx:alpine
     container_name: vehicle_erp_nginx
